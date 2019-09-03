@@ -22,25 +22,26 @@ tg_env$trtgrps <- tibble(
   n = 0,
   grp = as.factor(paste0("T", 1:length(grp))),
   grplab = as.character(paste0(c(7, 5, 3, 0), "-day")),
-  est_mean = rep(0, length(grp)),
+  # logodds and var used for pbest and rar
+  est_logodds = rep(0, length(grp)),
   est_var = rep(0, length(grp)),
-  prob_ni = rep(0, length(grp))
+  est_prop = rep(0, length(grp)),
+  prob_ni = rep(0, length(grp)),
+  trt_ni = rep(0, length(grp))
 )
 
 rownames(tg_env$trtgrps) <- NULL
 tg_env$rar_active <- 0
-tg_env$ni_thresh <- 0.99
-tg_env$trt_ni <- rep(0, length(grp)-1)
-
-tg_env$trtgrps
-tg_env$rar_active
-
-# 
-# tmp2 <- tg_env$trtgrps
-
+# we have to have this much certainty that the 
+# alt treatments are non-inferior using a non_inf_delta
+tg_env$ni_thresh <- 0.85
 # min samp size for rar by subgroup
 rar_min_cell <- 50
-non_inf_delta <- 0.01
+non_inf_delta <- 0.1
+
+# tg_env$trtgrps
+# tg_env$rar_active
+# tmp2 <- tg_env$trtgrps
 
 interim_seed <- 34432
 
@@ -89,8 +90,9 @@ generate_trial_data <- function(idx_start = 1, idx_end = 100) {
   }
   
   # prevents the case where all pts in a given group are all successes
-  allones <- T
-  while(allones){
+  rngdat <- T
+  its <- 1
+  while(rngdat){
     dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mean[dat$grp])
     
     cell_n <- dat %>%
@@ -100,7 +102,15 @@ generate_trial_data <- function(idx_start = 1, idx_end = 100) {
       dplyr::pull(n)
     
     if(length(cell_n) == length(grp)*2 & all(cell_n > 0)){
-      allones <- F
+      rngdat <- F
+    }
+    
+    its <- its + 1
+    
+    if(its > 10){
+      dat
+      table(dat$y, dat$grp)
+      stop(paste0("Problem generating data."))
     }
   }
 
@@ -166,13 +176,13 @@ fit_stan <- function(df){
 
   model_props <- apply(model_mu, 2, function(x) exp(x)/(1+exp(x)))
   colnames(model_props) <- paste0("b", 1:4)
-  colMeans(model_props)
+  tg_env$trtgrps$est_prop <- colMeans(model_props)
 
   # comparisons
   model_prop_diffs <- do.call(cbind, lapply(1:4, function(x) 
     model_props[,1] - model_props[,x]))
 
-  tg_env$trtgrps$est_mean <- apply(model_mu, 2, mean)
+  tg_env$trtgrps$est_logodds <- apply(model_mu, 2, mean)
   tg_env$trtgrps$est_var <- diag(var(model_mu))
   tg_env$trtgrps$prob_best <- p_best(model_mu)
   tg_env$trtgrps$prob_ni <- colMeans(model_prop_diffs < non_inf_delta)
@@ -240,16 +250,18 @@ simulate_trial <- function(id_trial){
     
     fit_stan(df)
     
-    trts_ni <- c(tg_env$trtgrps$prob_ni > tg_env$ni_thresh)[2:4]
-    if(any(trts_ni)){
-      tg_env$trt_ni <- trts_ni
-      message("Found one or more NI treatment", paste0(trts_ni, sep= " "))
+    trts_ni <- c(tg_env$trtgrps$prob_ni > tg_env$ni_thresh)
+    if(all(trts_ni)){
+      tg_env$trtgrps$trt_ni <- trts_ni
+      tg_env$trtgrps$trt_ni[1] <- NA
+      message("All treatments NI", paste0(trts_ni, sep= " "))
+      break
     }
     
   }
   
   
-  tg_env$trtgrps
+  cbind(id = id_trial, tg_env$trtgrps)
   
   
 }
@@ -267,9 +279,9 @@ figs <- function(df){
     scale_y_continuous("n", limits = c(0, max(tg_env$trtgrps$n)))+
     ggtitle("Samples Size")
   
-  ggplot(tg_env$trtgrps, aes(x = grp, y = est_mean)) +
+  ggplot(tg_env$trtgrps, aes(x = grp, y = est_logodds)) +
     geom_point() + 
-    scale_y_continuous("Log odds", limits = c(0, max(tg_env$trtgrps$est_mean)))+
+    scale_y_continuous("Log odds", limits = c(0, max(tg_env$trtgrps$est_logodds)))+
     ggtitle("Log odds")
   
   ggplot(tg_env$trtgrps, aes(x = grp, y = prob_best)) +
@@ -300,12 +312,11 @@ figs <- function(df){
 
 main <- function(){
   
-  library(doParallel)
-  library(foreach)
+
+  pkgs <- c("randomizr", "doParallel","foreach", "dplyr",
+            "ggplot2", "rstan")
   
-  pkgs <- c("foreach", "beepr")
-  
-  n_sims <- 10
+  n_sims <- 1000
   myseed <- 1
   
   starttime <- Sys.time()
@@ -326,47 +337,32 @@ main <- function(){
                      .errorhandling = 'pass',
                      .packages=pkgs
   ) %dopar%{
-    
     # i = 1
     set.seed(myseed + i)
-    
     res <- simulate_trial(i)
-    
-    # flog.info("Finished trial: sim = %s", i)
     return(res)
   }
   
-  # dfres1 <- data.frame()
-  # dfres2 <- data.frame()
-  # 
-  # for(i in 1:length(results)){
-  #   myv <- unlist(results[[i]][1:21])
-  #   nm <- names(myv)
-  #   
-  #   dfres1 <- rbind(dfres1, myv)
-  #   colnames(dfres1) <- nm
-  # }
-  # 
-  # 
-  # 
-  # endtime <- Sys.time()
-  # difftime(endtime, starttime, units = "hours")
-  # 
-  # beepr::beep()
-  # w <- warnings()
-  # 
-  # rdsfilename <- file.path("out", 
-  #                          paste0("res-",
-  #                                 format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
-  # 
-  # saveRDS(list(results=dfres1, 
-  #              cfg = cfg, 
-  #              warnings = w,
-  #              starttime = starttime, 
-  #              endtime = endtime,
-  #              duration = difftime(endtime, starttime, units = "hours")),
-  #         rdsfilename)
-  # # assign("last.warning", NULL, envir = baseenv())
+  
+  dfres <- do.call(rbind, results)
+   
+  endtime <- Sys.time()
+  difftime(endtime, starttime, units = "hours")
+  
+  beepr::beep()
+  w <- warnings()
+  
+  rdsfilename <- file.path("out", 
+                           paste0("res-",
+                                  format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
+
+  saveRDS(list(results=dfres1,
+               warnings = w,
+               starttime = starttime,
+               endtime = endtime,
+               duration = difftime(endtime, starttime, units = "hours")),
+          rdsfilename)
+  assign("last.warning", NULL, envir = baseenv())
   
   if(!debug){
     stopCluster(cl)
