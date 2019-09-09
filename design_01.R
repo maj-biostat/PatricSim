@@ -117,33 +117,71 @@ generate_trial_data <- function(idx_start = 1, idx_end = 100) {
   if(!tg_env$rar_active){
     dat$grp <- randomizr::complete_ra(N = n, num_arms = length(grp))
   } else {
+    
     dat$grp <- randomizr::complete_ra(N = n,
                                       num_arms = length(grp),
                                       prob_each = tg_env$trtgrps$rand_prob)
+    
+    message(paste0("Groups produced by randomizr ", length(unique(dat$grp))))
+    
+    # if(length(unique(dat$grp)) < max(grp)){
+    #   rngdat <- T
+    #   its <- 1
+    #   while(rngdat){
+    #     dat$grp <- randomizr::complete_ra(N = n,
+    #                                       num_arms = length(grp),
+    #                                       prob_each = tg_env$trtgrps$rand_prob)
+    #     if(length(unique(dat$grp)) == max(grp)){
+    #       rngdat <- F
+    #     }
+    #     if(its > 10){
+    #       message("dbg")
+    #     }
+    #     its <- its + 1
+    #   }
+    # }
+    
+    
+    
   }
   
   # prevents the case where all pts in a given group are all successes
   rngdat <- T
   its <- 1
+  grpidx <- as.numeric(dat$grp)
   while(rngdat){
-    dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mean[dat$grp])
+    message(paste0("Data generation attempt ", its))
+    dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mean[grpidx])
     
-    cell_n <- dat %>%
+    if(nrow(tg_env$df)>0){
+      tmp <- rbind(tg_env$df, dat)
+    } else{
+      tmp <- dat
+    }
+    
+    cell_n <- tmp %>%
       dplyr::group_by(y, grp) %>%
       dplyr::summarise(n = n()) %>%
       dplyr::ungroup() %>%
       dplyr::pull(n)
+    
+    message(paste0(" ", cell_n))
     
     if(length(cell_n) == length(grp)*2 & all(cell_n > 0)){
       rngdat <- F
     }
     
     its <- its + 1
+
     
     if(its > 10){
-      dat
-      table(dat$y, dat$grp)
+
+      saveRDS(list(dat, cell_n, idx_start, idx_end, grpidx,
+                   tg_env$trtgrps$true_mean),
+              file = "panic.RDS")
       stop(paste0("Problem generating data."))
+      
+      
     }
   }
   
@@ -169,16 +207,10 @@ p_best <- function(mat) {
 
 
 
-fit_stan <- function(df){
-  
-  # idx_intrm=idx_intrm+1
-  # message(paste0("Interim ", idx_intrm))
-  # df <- rbind(df,
-  #             generate_trial_data(idx_start = nrow(df)+1,
-  #                                 idx_end = looks[idx_intrm]))
+fit_stan <- function(){
   
   # participant data
-  Xmat <- model.matrix(y ~ 0 + grp, data = df)
+  Xmat <- model.matrix(y ~ 0 + grp, data = tg_env$df)
   
   # lm1 <- glm(y ~ 0 + grp, data = df, family = "binomial")
   # summary(lm1)
@@ -186,9 +218,9 @@ fit_stan <- function(df){
   ## Zmat for estimating mean change in each group
   Zmat <- as.data.frame(model.matrix(~ 0 + grp, data = tg_env$trtgrps))
   
-  model_data <- list(y = df$y,
+  model_data <- list(y = tg_env$df$y,
                      X = Xmat,
-                     N = length(df$y), K = 4, prior_only = 0)
+                     N = length(tg_env$df$y), K = 4, prior_only = 0)
   
   model_fit <- rstan::sampling(tg_env$model_code, 
                                data = model_data,
@@ -231,6 +263,12 @@ fit_stan <- function(df){
                                         tg_env$trtgrps$est_var)/(tg_env$trtgrps$n + 1))
     tg_env$trtgrps$rand_prob <- tg_env$trtgrps$rand_prob / sum(tg_env$trtgrps$rand_prob)
     
+    # if(any(tg_env$trtgrps$rand_prob == 0)){
+    #   message("Fixing arm with zero prob ")
+    #   tg_env$trtgrps$rand_prob[tg_env$trtgrps$rand_prob == 0] <- 0.01  
+    #   tg_env$trtgrps$rand_prob <- tg_env$trtgrps$rand_prob / sum(tg_env$trtgrps$rand_prob)
+    # }
+    
     message("Updated alloc prob  = ", sprintf("%.3f ", tg_env$trtgrps$rand_prob))
     
   } else {
@@ -254,7 +292,7 @@ simulate_trial <- function(id_trial){
   
   looks <- seq(100,500,by=100)
   
-  df <- tibble()
+  tg_env$df <- tibble()
   
   for(idx_intrm in 1:length(looks)){
     
@@ -263,18 +301,16 @@ simulate_trial <- function(id_trial){
     # idx_intrm=2
     # idx_intrm=3
     message(paste0("Interim ", idx_intrm))
-    df <- rbind(df,
-                generate_trial_data(idx_start = nrow(df)+1,
+    tg_env$df <- rbind(tg_env$df,
+                generate_trial_data(idx_start = nrow(tg_env$df)+1,
                                     idx_end = looks[idx_intrm]))
-    
-    # table(df$grp)
-    # table(df$y, df$grp)
+
     
     # rar disabled until each cell has rar_min_cell (10)
-    tg_env$rar_active <- all(as.numeric(table(df$grp)) > rar_min_cell)
+    tg_env$rar_active <- all(as.numeric(table(tg_env$df$grp)) > rar_min_cell)
     
     # cumulative total of participants assigned to each group
-    tg_env$trtgrps$n <- df %>%
+    tg_env$trtgrps$n <- tg_env$df %>%
       dplyr::group_by(grp) %>%
       dplyr::summarise(n = n()) %>%
       dplyr::ungroup() %>%
@@ -284,15 +320,16 @@ simulate_trial <- function(id_trial){
       dplyr::mutate(n = ifelse(is.na(n), 0, n)) %>%
       dplyr::pull(n)
     
-    # table(df$subX)
+    # table(tg_env$df$subX)
     
-    fit_stan(df)
+    fit_stan()
     
     trts_ni <- c(tg_env$trtgrps$prob_ni > tg_env$ni_thresh)
     if(all(trts_ni)){
       tg_env$trtgrps$trt_ni <- trts_ni
       tg_env$trtgrps$trt_ni[1] <- NA
       message("All treatments NI: ", paste0(trts_ni, sep= " "))
+      message("Exiting current trial simulation.")
       break
     }
     
@@ -304,8 +341,8 @@ simulate_trial <- function(id_trial){
   
 }
 
-figs <- function(df){
-  dfig <- df %>%
+figs <- function(){
+  dfig <- tg_env$df %>%
     dplyr::mutate(grplab = tg_env$trtgrps$grplab[as.numeric(gsub("T", "", grp))]) %>%
     dplyr::group_by(grp, grplab) %>%
     dplyr::summarise(n = n(),
@@ -354,7 +391,7 @@ figs <- function(df){
 # main loop
 
 interim_seed <- 34432
-n_sims <- 3
+n_sims <- 10
 myseed <- 1
 
 starttime <- Sys.time()
