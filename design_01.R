@@ -40,26 +40,7 @@ Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
 grp <- 1:4
 
 tg_env <- new.env()
-tg_env$trtgrps <- tibble(
-  prob_best = rep(1/length(grp), length(grp)),
-  rand_prob = rep(1/length(grp), length(grp)),
-  true_mean = rep(0.8, length(grp)),
-  n = 0,
-  grp = as.factor(paste0("T", 1:length(grp))),
-  grplab = as.character(paste0(c(7, 5, 3, 0), "-day")),
-  # logodds and var used for pbest and rar
-  est_logodds = rep(0, length(grp)),
-  est_var = rep(0, length(grp)),
-  est_prop = rep(0, length(grp)),
-  prob_ni = rep(0, length(grp)),
-  trt_ni = rep(0, length(grp))
-)
 
-rownames(tg_env$trtgrps) <- NULL
-tg_env$rar_active <- 0
-# we have to have this much certainty that the
-# alt treatments are non-inferior using a non_inf_delta
-tg_env$ni_thresh <- 0.85
 # min samp size for rar by subgroup
 rar_min_cell <- 50
 non_inf_delta <- 0.1
@@ -79,6 +60,28 @@ tg_env$model_code <- rstan::stan_model(file = "logistic.stan",
 
 
 scenario <- function(idx = 1){
+  
+  tg_env$trtgrps <- tibble(
+    prob_best = rep(1/length(grp), length(grp)),
+    rand_prob = rep(1/length(grp), length(grp)),
+    true_mean = rep(0.8, length(grp)),
+    n = 0,
+    grp = as.factor(paste0("T", 1:length(grp))),
+    grplab = as.character(paste0(c(7, 5, 3, 0), "-day")),
+    # logodds and var used for pbest and rar
+    est_logodds = rep(0, length(grp)),
+    est_var = rep(0, length(grp)),
+    est_prop = rep(0, length(grp)),
+    prob_ni = rep(0, length(grp)),
+    trt_ni = rep(0, length(grp))
+  )
+  
+  rownames(tg_env$trtgrps) <- NULL
+  tg_env$rar_active <- 0
+  # we have to have this much certainty that the
+  # alt treatments are non-inferior using a non_inf_delta
+  tg_env$ni_thresh <- 0.85
+  
   if(idx == 1){
     # all same - high prob of recovery -
     # 0.9 will give you estimation issues, e.g. all values in grp set to 1
@@ -292,6 +295,7 @@ simulate_trial <- function(id_trial){
   
   looks <- seq(100,500,by=100)
   
+  # reset data
   tg_env$df <- tibble()
   
   for(idx_intrm in 1:length(looks)){
