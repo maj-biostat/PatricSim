@@ -24,7 +24,8 @@
 # proportion recovered, a superior reference arm, non-inferiority in one of
 # the lower dose durations etc.
 
-
+library(configr)
+library(optparse)
 library(randomizr)
 library(doParallel)
 library(foreach)
@@ -35,6 +36,8 @@ options(mc.cores = 1)
 # options(mc.cores = parallel::detectCores()-1)
 rstan_options(auto_write = TRUE)
 Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
+
+source("setup.R")
 
 # define treatment groups, initial allocation probability and true means
 grp <- 1:4
@@ -81,6 +84,7 @@ scenario <- function(idx = 1){
   # we have to have this much certainty that the
   # alt treatments are non-inferior using a non_inf_delta
   tg_env$ni_thresh <- 0.85
+  
   
   if(idx == 1){
     # all same - high prob of recovery -
@@ -285,13 +289,13 @@ fit_stan <- function(){
 
 simulate_trial <- function(id_trial){
   
-  usescen <- 1
+  # scenarioid <- 1
   
   message(paste0("#################################"))
-  message(paste0("TRIAL ", id_trial, " SCENARIO ", usescen))
+  message(paste0("TRIAL ", id_trial, " SCENARIO ", cfg$scenarioid))
   message(paste0("#################################"))
   
-  scenario(usescen)
+  scenario(cfg$scenarioid)
   
   looks <- seq(100,500,by=100)
   
@@ -397,6 +401,7 @@ figs <- function(){
 interim_seed <- 34432
 n_sims <- 10
 myseed <- 1
+cfg <- get_cfg()
 
 starttime <- Sys.time()
 set.seed(myseed)
