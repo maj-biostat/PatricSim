@@ -1,4 +1,30 @@
 
+
+##
+# In this design we have 4 groups representing 7, 5, 3 and zero days
+# of treatment. The analysis is based on the two bottle design. 
+# 7 days treatment is the reference level that is used in comparisons.
+# Randomisation is constant to each arm until a minmimum number of 
+# participants is reached in each arm and then randomisation is by RAR.
+# The response is binary, representing whether a participant recovered
+# by day 7 or not. 
+# A simple logistic regression model is used for the analysis. No intercept
+# is specified and so the parameter estimates give the group means of 
+# log-odds of recovery.
+# We compute the probability that each group is the best. We also run a
+# non-inferiority test by first computing the proportion recovered
+# in each group and then comparing each group to the reference arm of 7 days.
+# From this we get the probabilities that each arm is non-inferior to the
+# reference arm.
+# At each interim we do NI tests. We check whether the proportion recovered
+# in each arm is within 0.1 of the reference arm. If the probability of NI 
+# is > 0.85 then the arm is considered NI. If we conclude that all 
+# arms are NI to the reference arm, then we halt the trial.
+# A number of scenarios is defined covering no differences in the true 
+# proportion recovered, a superior reference arm, non-inferiority in one of
+# the lower dose durations etc.
+
+
 library(randomizr)
 library(doParallel)
 library(foreach)
@@ -42,12 +68,11 @@ non_inf_delta <- 0.1
 # tg_env$rar_active
 # tmp2 <- tg_env$trtgrps
 
-interim_seed <- 34432
 
-tg_env$model_code <- rstan::stan_model(file = "logistic.stan", auto_write = TRUE)
+tg_env$model_code <- rstan::stan_model(file = "logistic.stan", 
+                                       auto_write = TRUE)
 
-n_sims <- 3
-myseed <- 1
+
 
 
 
@@ -165,10 +190,14 @@ fit_stan <- function(df){
                      X = Xmat,
                      N = length(df$y), K = 4, prior_only = 0)
   
-  model_fit <- rstan::sampling(tg_env$model_code, data = model_data,
-                               chains = 1, iter = 2000,
+  model_fit <- rstan::sampling(tg_env$model_code, 
+                               data = model_data,
+                               chains = 1, 
+                               iter = 2000,
+                               refresh = 2000,
                                seed = interim_seed,
-                               control = list(adapt_delta = 0.999))
+                               control = list(adapt_delta = 0.999),
+                               verbose = F)
   
   # print(model_fit)
   
@@ -193,9 +222,7 @@ fit_stan <- function(df){
   tg_env$trtgrps$est_var <- diag(var(model_mu))
   tg_env$trtgrps$prob_best <- p_best(model_mu)
   tg_env$trtgrps$prob_ni <- colMeans(model_prop_diffs < non_inf_delta)
-  
-  
-  
+
   if(tg_env$rar_active){
     
     message("Original alloc prob = ", sprintf("%.3f ", tg_env$trtgrps$rand_prob))
@@ -210,16 +237,20 @@ fit_stan <- function(df){
     message("Rar not active n = ", paste0(tg_env$trtgrps$n, sep = " "))
     
   }
-  
-  
-  
+ 
 }
 
 
 
 simulate_trial <- function(id_trial){
   
-  scenario(1)
+  usescen <- 1
+  
+  message(paste0("#################################"))
+  message(paste0("TRIAL ", id_trial, " SCENARIO ", usescen))
+  message(paste0("#################################"))
+  
+  scenario(usescen)
   
   looks <- seq(100,500,by=100)
   
@@ -261,7 +292,7 @@ simulate_trial <- function(id_trial){
     if(all(trts_ni)){
       tg_env$trtgrps$trt_ni <- trts_ni
       tg_env$trtgrps$trt_ni[1] <- NA
-      message("All treatments NI", paste0(trts_ni, sep= " "))
+      message("All treatments NI: ", paste0(trts_ni, sep= " "))
       break
     }
     
@@ -321,6 +352,11 @@ figs <- function(df){
 
 
 # main loop
+
+interim_seed <- 34432
+n_sims <- 3
+myseed <- 1
+
 starttime <- Sys.time()
 set.seed(myseed)
 
@@ -338,7 +374,7 @@ rdsfilename <- file.path("out",
                          paste0("res-",
                                 format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
 
-saveRDS(list(results=dfres,
+saveRDS(list(results=dres,
              warnings = w,
              starttime = starttime,
              endtime = endtime,
