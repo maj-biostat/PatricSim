@@ -15,6 +15,8 @@ get_cmdline_opts <- function(){
 }
 
 
+# Strictly speaking I do not require the config file but will leave in 
+# for the time being
 get_cfg <- function(cfgfile = "cfg.yaml"){
   
   opt <- get_cmdline_opts()
