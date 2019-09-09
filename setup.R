@@ -5,7 +5,11 @@ get_cmdline_opts <- function(){
   option_list <- list(
     optparse::make_option(c("-s", "--scenario"), 
                           type = "integer", default = NULL,
-                          help = "scenario", metavar = "integer")
+                          help = "scenario", metavar = "integer"),
+    optparse::make_option(c("-n", "--nsims"), 
+                          type = "integer", default = NULL,
+                          help = "number of simulations", 
+                          metavar = "integer")
   )
   
   opt_parser <- OptionParser(option_list = option_list);
@@ -35,6 +39,12 @@ get_cfg <- function(cfgfile = "cfg.yaml"){
     l$scenarioid <- opt$scenario
   } else {
     l$scenarioid <- tt$scenarioid
+  }
+  
+  if("nsims" %in% names(opt)){
+    l$nsims <- opt$nsims
+  } else {
+    l$nsims <- 3
   }
 
 

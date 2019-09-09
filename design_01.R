@@ -399,14 +399,14 @@ figs <- function(){
 # main loop
 
 interim_seed <- 34432
-n_sims <- 10
+
 myseed <- 1
 cfg <- get_cfg()
 
 starttime <- Sys.time()
 set.seed(myseed)
 
-res <- lapply(1:n_sims, simulate_trial)
+res <- lapply(1:cfg$nsims, simulate_trial)
 dres <- do.call(rbind, res)
 
 endtime <- Sys.time()
