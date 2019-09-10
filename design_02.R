@@ -117,7 +117,7 @@ scenario <- function(idx = 1){
 generate_trial_data <- function() {
   
   
-  n <- 500
+  n <- 2000
   dat <- tibble(
     id = 1:n
   )
@@ -200,8 +200,8 @@ fit_stan <- function(){
   model_fit <- rstan::sampling(tg_env$model_code, 
                                data = model_data,
                                chains = 1, 
-                               iter = 2000,
-                               refresh = 2000,
+                               iter = 4000,
+                               refresh = 4000,
                                seed = interim_seed,
                                control = list(adapt_delta = 0.999),
                                verbose = F)
@@ -233,17 +233,24 @@ fit_stan <- function(){
   # now estimate differences: 
   # order is difference in active (A5 - A3), difference in placebo (P5 - P3)
   model_prop_diffs <- model_prop[, c(1, 3)] - model_prop[, c(2, 4)]
-  # we expect that the difference between the two active arms equals 
-  # the difference between the two placebo arms and so we compute the 
-  # probability that these two differences are within 0.1 of each other.
-  tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, 1] - model_prop_diffs[, 2])
-  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, 1] - model_prop_diffs[, 2]) < 0.1)
-  # what is the probability that the longer placebo is different to the 
-  # shorter placebo?
-  tg_env$mean_p_diff <- mean(model_prop_diffs[, 2])
   
-  tg_env$prob_p5_gt_p3 <- mean(model_prop_diffs[, 2] > 0)
-  # message(tg_env$prob_p5_gt_p3)
+  # We expect that the difference between the two active arms (A5-A3) will be
+  # equivalent to the  difference between the two placebo arms (P5-P3) and so we
+  # compute the probability that these two differences are within a threshold of
+  # each other. If this probability is high we conclude equivalence.
+  tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, 1] - model_prop_diffs[, 2])
+  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, 1] - model_prop_diffs[, 2]) < 0.05)
+  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > 0.975)
+  
+  # Alternatively, if this probability was very low we could indicate futile.
+  # We could compute the predictive probability of concluding equivalence at the
+  # end of the trial.
+
+  # Next, is the proportion that recover under the longer duration placebo
+  # equivalent to the proportion that recover under the shorter duration placebo?
+  tg_env$mean_p_diff <- mean(model_prop_diffs[, 2])
+  tg_env$prob_p5_eq_p3 <- mean(abs(model_prop_diffs[, 2]) < 0.05)
+  tg_env$p5_eq_p3 <- as.numeric(tg_env$prob_p5_eq_p3 > 0.975)
 
 }
 
@@ -281,7 +288,9 @@ simulate_trial <- function(id_trial = 1){
     mean_diff_in_diff = tg_env$mean_diff_in_diff,
     mean_p_diff = tg_env$mean_p_diff,
     prob_a_eq_p = tg_env$prob_a_eq_p,
-    prob_p5_gt_p3 = tg_env$prob_p5_gt_p3
+    prob_p5_eq_p3 = tg_env$prob_p5_eq_p3,
+    a_eq_p = as.numeric(tg_env$prob_a_eq_p > 0.9),
+    p5_eq_p3 = as.numeric(tg_env$prob_p5_eq_p3 > 0.9)
   )
   
   
@@ -345,7 +354,15 @@ cfg <- get_cfg()
 starttime <- Sys.time()
 # set.seed(myseed)
 
-res <- lapply(1:cfg$nsims, simulate_trial)
+# prealloc list of length nsims
+res <- vector(mode = "list", length = cfg$nsims) 
+
+for(i in 1:cfg$nsims){
+  res[[i]] <- simulate_trial()
+  
+  
+}
+
 dres <- do.call(rbind, res)
 
 endtime <- Sys.time()
