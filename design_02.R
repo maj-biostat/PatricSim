@@ -1,4 +1,30 @@
 
+
+##
+# In this design we have 4 groups representing:
+# 3 days placebo
+# 3 days active
+# 5 days placebo
+# 5 days active
+
+# This is a single bottle design.
+
+# Randomisation is fixed (non blocked) for each arm throughout the trial up to 
+# a sample size of 500.
+# No adaptations are in place and a single analysis occurs at n = 500.
+# The response is binary, representing whether a participant recovered
+# by day 7 or not. 
+
+# A simple logistic regression model is used for the analysis. Terms are 
+# included for the intercept, the status of the intervention (active vs placebo)
+# and the duration of the intervention (3 and 5 days).
+
+# At the end of the trial we compare .
+
+
+# library(brms)
+library(configr)
+library(optparse)
 library(randomizr)
 library(doParallel)
 library(foreach)
@@ -10,82 +36,133 @@ options(mc.cores = 1)
 rstan_options(auto_write = TRUE)
 Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
 
+source("setup.R")
+
 # define treatment groups, initial allocation probability and true means
 
+
 tg_env <- new.env()
-tg_env$trtgrps <- tibble(
-  prob_best = rep(1/2, 2),
-  rand_prob = rep(1/2, 2),
-  true_mean = rep(0.8, 2),
-  n = 0,
-  grp = as.factor(paste0("T", 1:2)),
-  grplab = as.character(paste0(c(7, 0), "-day")),
-  # logodds and var used for pbest and rar
-  est_logodds = rep(0, 2),
-  est_var = rep(0, 2),
-  est_prop = rep(0, 2),
-  prob_ni = rep(0, 2),
-  trt_ni = rep(0, 2)
-)
-tg_env$rar_active <- 0
 
-rownames(tg_env$trtgrps) <- NULL
+# min samp size for rar by subgroup
+rar_min_cell <- 50
+non_inf_delta <- 0.1
+# want specific ordering.
+grp <- factor(c(
+  "A3", "A5", "P3", "P5"
+), levels = c(
+  "A3", "A5", "P3", "P5"
+))
 
+# tg_env$trtgrps
+# tg_env$rar_active
+# tmp2 <- tg_env$trtgrps
 
+interim_seed <- 34432
 
-
+tg_env$model_code <- rstan::stan_model(file = "logistic_02.stan",
+                                       auto_write = TRUE)
 
 
 
-generate_trial_data <- function(idx_start = 1, idx_end = 50) {
+
+
+
+
+scenario <- function(idx = 1){
+  # idx = 1
+  tg_env$trtgrps <- tibble(
+    prob_best = rep(1/length(grp), length(grp)),
+    true_mean = rep(0.8, length(grp)),
+    n = 0,
+    trt = as.numeric(substr(grp, 1, 1) == "A"),
+    grp = grp,
+    grplab = as.character(grp),
+    # logodds and var used for pbest and rar
+    est_logodds = rep(0, length(grp)),
+    est_var = rep(0, length(grp))
+  )
+
+  # we have to have this much certainty that the
+  # alt treatments are non-inferior using a non_inf_delta
+  tg_env$ni_thresh <- 0.85
+
+  if(idx == 1){
+    # all same - high prob of recovery -
+    # 0.9 will give you estimation issues, e.g. all values in grp set to 1
+    tg_env$trtgrps$true_mean = rep(0.8, length(grp))
+  } else if(idx == 2) {
+    # all same - med prob of recovery
+    tg_env$trtgrps$true_mean = rep(0.7, length(grp))
+  } else if(idx == 3) {
+    # all same - low prob of recovery
+    tg_env$trtgrps$true_mean = rep(0.6, length(grp))
+  } 
+  # else if(idx == 4) {
+  #   # 7 day ab is better than everything
+  #   tg_env$trtgrps$true_mean = c(0.8, 0.5, 0.5, 0.5)
+  # } else if(idx == 5) {
+  #   # 7 day ab is no different from 5 day, others are worse
+  #   tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.5)
+  # } else if(idx == 6) {
+  #   # any ab is better than none
+  #   tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.7, 0.5)
+  # } else if(idx == 7) {
+  #   # any ab is better than none gradient
+  #   tg_env$trtgrps$true_mean = c(0.9, 0.8, 0.7, 0.5)
+  # }
+}
+
+
+
+generate_trial_data <- function() {
   
   
-  n <- idx_end - idx_start + 1
+  n <- 500
   dat <- tibble(
-    id = idx_start:idx_end
+    id = 1:n
   )
   
-  n_grps <- max(as.numeric(tg_env$trtgrps$grp))
+  dat$grp <- randomizr::complete_ra(N = n, 
+                                    num_arms = length(grp),
+                                    conditions = grp)
   
-  if(!tg_env$rar_active){
-    dat$grp <- randomizr::complete_ra(N = n, num_arms = 2)
-  } else {
-    dat$grp <- randomizr::complete_ra(N = n,
-                                      num_arms = n_grps,
-                                      prob_each = tg_env$trtgrps$rand_prob)
-  }
+  message(paste0("Groups produced by randomizr ", length(unique(dat$grp))))
+
+  dat$trt <- as.numeric(substr(dat$grp, 1, 1) == "A")
+  dat$dur <- as.numeric(substr(dat$grp, 2, 2) == 5)
   
   # prevents the case where all pts in a given group are all successes
-  rngdat <- T
-  its <- 1
-  while(rngdat){
-    dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mean[dat$grp])
-    
+  rngdat <- 1
+  grpidx <- as.numeric(dat$grp)
+  while(rngdat > 0 & rngdat < 10){
+    message(paste0("Data generation attempt ", rngdat))
+    dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mean[grpidx])
+
     cell_n <- dat %>%
       dplyr::group_by(y, grp) %>%
       dplyr::summarise(n = n()) %>%
       dplyr::ungroup() %>%
       dplyr::pull(n)
     
-    if(length(cell_n) == n_grps*2 & all(cell_n > 0)){
-      rngdat <- F
+    message(paste0(" ", cell_n))
+    
+    if(length(cell_n) == length(grp)*2 & all(cell_n > 0)){
+      rngdat <- 0
+    } else {
+      rngdat <- rngdat + 1
     }
-    
-    its <- its + 1
-    
-    if(its > 10){
-      dat
-      table(dat$y, dat$grp)
+
+    if(rngdat > 10){
+      saveRDS(list(dat, cell_n, idx_start, idx_end, grpidx,
+                   tg_env$trtgrps$true_mean),
+              file = "panic.RDS")
       stop(paste0("Problem generating data."))
     }
   }
-  
-  # aggregate(dat$y, list(dat$grp), mean)
-  # plot(table(dat$grp), ylim = c(0, 60))
-  # plot(aggregate(dat$y, list(dat$grp), mean))
-  
+
   dat
 }
+
 
 p_best <- function(mat) {
   as.numeric(prop.table(table(factor(max.col(mat), levels = 1:ncol(mat)))))
@@ -93,118 +170,202 @@ p_best <- function(mat) {
 
 
 
-fit_stan <- function(df){
+fit_stan <- function(){
   
   # participant data
-  Xmat <- model.matrix(y ~ 0 + grp, data = df)
+  tmp <- tg_env$df %>%
+    dplyr::group_by(trt, dur) %>%
+    dplyr::summarise(y = sum(y),
+                     n = n()) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(`trt:dur` = trt * dur) %>%
+    dplyr::arrange(-trt, -dur)
+
+  Xmat <- as.matrix(tmp %>% dplyr::select(trt, dur, `trt:dur`))
   
-  n_grps <-  max(as.numeric(tg_env$trtgrps$grp))
+  # y = tmp %>% dplyr::pull(y)
+  # n = tmp %>% dplyr::pull(n)
+  # lm1 <- glm(cbind(y, n-y) ~ trt*dur, data = tmp, family = "binomial"); summary(lm1)
   
-  model_code <- rstan::stan_model(file = "logistic.stan", auto_write = TRUE)
-  model_data <- list(y = df$y,
+  # ## Zmat for estimating mean in each group
+  Zmat <- cbind(intercept = 1, Xmat)
+  
+  model_data <- list(y = tmp %>% dplyr::pull(y),
+                     n = tmp %>% dplyr::pull(n),
                      X = Xmat,
-                     N = length(df$y),
-                     K = n_grps,
+                     N = nrow(Xmat), 
+                     K = 3,  # excl intercept
                      prior_only = 0)
   
-  model_fit <- rstan::sampling(model_code, data = model_data,
-                               chains = 1, iter = 2000,
-                               seed = 652732,
-                               control = list(adapt_delta = 0.999))
+  model_fit <- rstan::sampling(tg_env$model_code, 
+                               data = model_data,
+                               chains = 1, 
+                               iter = 2000,
+                               refresh = 2000,
+                               seed = interim_seed,
+                               control = list(adapt_delta = 0.999),
+                               verbose = F)
+  
+  # model_fit <- rstan::sampling(tg_env$model_code, data = model_data,chains = 1, iter = 1,refresh = 1,seed = interim_seed,control = list(adapt_delta = 0.999),verbose = F)
+  
+  # print(model_fit)
   
   # log odds of being better by day 7
-  model_mu <- as.matrix(model_fit, pars = c("b"))
-  model_props <- apply(model_mu, 2, function(x) exp(x)/(1+exp(x)))
-  colnames(model_props) <- paste0("b", 1:n_grps)
-  tg_env$trtgrps$est_prop <- colMeans(model_props)
-  
-  # comparisons
-  model_prop_diffs <- do.call(cbind, lapply(1:n_grps, function(x)
-    model_props[,1] - model_props[,x]))
-  
+  model_draws <- as.matrix(model_fit, pars = c("b0", "b"))
+  # log odds
+  # order is: A5 A3 P5 P3
+  model_mu <- model_draws %*% t(Zmat)
+  # colMeans(model_mu)
+
+  # because we are looking at non-inferiority and require some form of
+  # non-inferiority threshold it makes some sense to convert from log odds
+  # to proportions.
+  # order is: A5 A3 P5 P3
+  model_prop <- apply(model_mu, 2, function(x) exp(x)/(1+exp(x)))
+  # sanity check - should be close to the true means used to generate the data
+  # colMeans(model_prop)
+
   tg_env$trtgrps$est_logodds <- apply(model_mu, 2, mean)
   tg_env$trtgrps$est_var <- diag(var(model_mu))
   tg_env$trtgrps$prob_best <- p_best(model_mu)
-  tg_env$trtgrps$prob_ni <- colMeans(model_prop_diffs < non_inf_delta)
+  tg_env$trtgrps$est_prop <- apply(model_prop, 2, mean)
   
-  tg_env$trtgrps$rand_prob <- sqrt((tg_env$trtgrps$prob_best *
-                                      tg_env$trtgrps$est_var)/(tg_env$trtgrps$n + 1))
+  # now estimate differences: 
+  # order is difference in active (A5 - A3), difference in placebo (P5 - P3)
+  model_prop_diffs <- model_prop[, c(1, 3)] - model_prop[, c(2, 4)]
+  # we expect that the difference between the two active arms equals 
+  # the difference between the two placebo arms and so we compute the 
+  # probability that these two differences are within 0.1 of each other.
+  tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, 1] - model_prop_diffs[, 2])
+  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, 1] - model_prop_diffs[, 2]) < 0.1)
+  # what is the probability that the longer placebo is different to the 
+  # shorter placebo?
+  tg_env$mean_p_diff <- mean(model_prop_diffs[, 2])
   
-  tg_env$trtgrps$rand_prob <- tg_env$trtgrps$rand_prob / sum(tg_env$trtgrps$rand_prob)
-  
+  tg_env$prob_p5_gt_p3 <- mean(model_prop_diffs[, 2] > 0)
+  # message(tg_env$prob_p5_gt_p3)
+
 }
 
 
 
-
-
-simulate_trial <- function(id_trial){
+simulate_trial <- function(id_trial = 1){
   
+  # id_trial = 1
+  
+  message(paste0("#################################"))
+  #message(paste0("TRIAL ", id_trial, " SCENARIO ", cfg$scenarioid))
+  message(paste0("#################################"))
+  
+  # scenario(cfg$scenarioid)
   scenario(1)
+
+  # reset data
+  tg_env$df <- generate_trial_data()
   
-  looks <- seq(100,500,by=50)
+  tg_env$trtgrps$n <- tg_env$df %>%
+    dplyr::group_by(grp) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::ungroup() %>%
+    # if one of the groups has not been randomised any patients
+    # then explicitly set it to zero rather than having it missing
+    dplyr::right_join(tibble(grp = tg_env$trtgrps$grp), by = "grp") %>%
+    dplyr::mutate(n = ifelse(is.na(n), 0, n)) %>%
+    dplyr::pull(n)
   
-  df <- tibble()
+  fit_stan()
   
-  for(idx_intrm in 1:length(looks)){
-    
-    # idx_intrm=1
-    # idx_intrm=idx_intrm+1
-    message(paste0("Interim ", idx_intrm))
-    df <- rbind(df,
-                generate_trial_data(idx_start = nrow(df)+1,
-                                    idx_end = looks[idx_intrm]))
-    
-    # rar enabled from the second interim
-    tg_env$rar_active <- 1
-    
-    # cumulative total of participants assigned to each group
-    tg_env$trtgrps$n <- df %>%
-      dplyr::group_by(grp) %>%
-      dplyr::summarise(n = n()) %>%
-      dplyr::ungroup() %>%
-      # if one of the groups has not been randomised any patients
-      # then explicitly set it to zero rather than having it missing
-      dplyr::right_join(tibble(grp = tg_env$trtgrps$grp), by = "grp") %>%
-      dplyr::mutate(n = ifelse(is.na(n), 0, n)) %>%
-      dplyr::pull(n)
-    
-    # table(df$subX)
-    
-    fit_stan(df)
-    
-    trts_ni <- c(tg_env$trtgrps$prob_ni > tg_env$ni_thresh)
-    if(all(trts_ni)){
-      tg_env$trtgrps$trt_ni <- trts_ni
-      tg_env$trtgrps$trt_ni[1] <- NA
-      message("All treatments NI", paste0(trts_ni, sep= " "))
-      break
-    }
-    
-  }
+ 
+  tibble(
+    id = id_trial, 
+    mean_diff_in_diff = tg_env$mean_diff_in_diff,
+    mean_p_diff = tg_env$mean_p_diff,
+    prob_a_eq_p = tg_env$prob_a_eq_p,
+    prob_p5_gt_p3 = tg_env$prob_p5_gt_p3
+  )
   
   
-  cbind(id = id_trial, tg_env$trtgrps)
+}
+
+figs <- function(){
+  dfig <- tg_env$df %>%
+    dplyr::mutate(grplab = tg_env$trtgrps$grplab[as.numeric(gsub("T", "", grp))]) %>%
+    dplyr::group_by(grp, grplab) %>%
+    dplyr::summarise(n = n(),
+                     yhat = mean(y)) %>%
+    dplyr::ungroup()
+  
+  ggplot(dfig, aes(x = grp, y = n)) +
+    geom_point() +
+    scale_y_continuous("n", limits = c(0, max(tg_env$trtgrps$n)))+
+    ggtitle("Samples Size")
+  
+  ggplot(tg_env$trtgrps, aes(x = grp, y = est_logodds)) +
+    geom_point() +
+    scale_y_continuous("Log odds", limits = c(0, max(tg_env$trtgrps$est_logodds)))+
+    ggtitle("Log odds")
+  
+  ggplot(tg_env$trtgrps, aes(x = grp, y = prob_best)) +
+    geom_point() +
+    scale_y_continuous("Probability", limits = c(0, max(tg_env$trtgrps$prob_best)))+
+    ggtitle("Prob best")
+  
+  ggplot(tg_env$trtgrps, aes(x = grp, y = rand_prob)) +
+    geom_point() +
+    scale_y_continuous("Probability", limits = c(0, max(tg_env$trtgrps$rand_prob)))+
+    ggtitle("Random alloc")
   
   
+  
+  # only if we have the mcmc samples
+  # dfig <- as_tibble(model_mu) %>%
+  #   tidyr::gather("trt", "logodds")
+  # ggplot(dfig, aes(x = trt, y = logodds))+
+  #   geom_jitter(height = 0, width = 0.05)
+  #
+  # dfig <- as_tibble(model_probs) %>%
+  #   tidyr::gather("trt", "prop")
+  # ggplot(dfig, aes(x = trt, y = prop))+
+  #   geom_jitter(height = 0, width = 0.05)
+  
+  # hist(model_prop_diffs[, 4])
 }
 
 
 
 
+# main loop
+# 
 
+interim_seed <- 34432
 
+# myseed <- 1
+cfg <- get_cfg()
 
+starttime <- Sys.time()
+# set.seed(myseed)
 
+res <- lapply(1:cfg$nsims, simulate_trial)
+dres <- do.call(rbind, res)
 
+endtime <- Sys.time()
 
+difftime(endtime, starttime, units = "hours")
 
+beepr::beep()
+w <- warnings()
 
+rdsfilename <- file.path("out",
+                         paste0("design-02-scenario-", cfg$scenarioid, "-",
+                                format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
 
+saveRDS(list(results=dres,
+             warnings = w,
+             starttime = starttime,
+             endtime = endtime,
+             duration = difftime(endtime, starttime, units = "hours")),
+        rdsfilename)
+assign("last.warning", NULL, envir = baseenv())
 
-
-
-
-
-
-
+  
+  
