@@ -48,9 +48,9 @@ rar_min_cell <- 50
 non_inf_delta <- 0.1
 # want specific ordering.
 grp <- factor(c(
-  "A3", "A5", "P3", "P5"
+  "A5", "A3", "P5", "P3"
 ), levels = c(
-  "A3", "A5", "P3", "P5"
+  "A5", "A3", "P5", "P3"
 ))
 
 # tg_env$trtgrps
@@ -82,10 +82,6 @@ scenario <- function(idx = 1){
     est_var = rep(0, length(grp))
   )
 
-  # we have to have this much certainty that the
-  # alt treatments are non-inferior using a non_inf_delta
-  tg_env$ni_thresh <- 0.85
-
   if(idx == 1){
     # all same - high prob of recovery -
     # 0.9 will give you estimation issues, e.g. all values in grp set to 1
@@ -97,19 +93,16 @@ scenario <- function(idx = 1){
     # all same - low prob of recovery
     tg_env$trtgrps$true_mean = rep(0.6, length(grp))
   } 
-  # else if(idx == 4) {
-  #   # 7 day ab is better than everything
-  #   tg_env$trtgrps$true_mean = c(0.8, 0.5, 0.5, 0.5)
-  # } else if(idx == 5) {
-  #   # 7 day ab is no different from 5 day, others are worse
-  #   tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.5)
-  # } else if(idx == 6) {
-  #   # any ab is better than none
-  #   tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.7, 0.5)
-  # } else if(idx == 7) {
-  #   # any ab is better than none gradient
-  #   tg_env$trtgrps$true_mean = c(0.9, 0.8, 0.7, 0.5)
-  # }
+  else if(idx == 4) {
+    # placebo 3 days reaches for rescue earlier than p5 and therefore
+    # gets higher proportion recovered.
+    tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.6)
+  } else if(idx == 5) {
+    # 5 days active better than 3. 
+    # placebo 3 days reaches for rescue earlier than p5 and therefore
+    # gets higher proportion recovered.
+    tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.6)
+  } 
 }
 
 
@@ -122,9 +115,16 @@ generate_trial_data <- function() {
     id = 1:n
   )
   
-  dat$grp <- randomizr::complete_ra(N = n, 
-                                    num_arms = length(grp),
-                                    conditions = grp)
+  # split this up but do not use at the moment.
+  # idea is to assess both first 200 as pilot and then all data at 2000.
+  grp1 <- randomizr::complete_ra(N = 200, 
+                                 num_arms = length(grp),
+                                 conditions = grp)
+  grp2 <- randomizr::complete_ra(N = n-200, 
+                                 num_arms = length(grp),
+                                 conditions = grp)
+  
+  dat$grp <- unlist(list(grp1, grp2))
   
   message(paste0("Groups produced by randomizr ", length(unique(dat$grp))))
 
@@ -231,7 +231,7 @@ fit_stan <- function(){
   tg_env$trtgrps$est_prop <- apply(model_prop, 2, mean)
   
   # now estimate differences: 
-  # order is difference in active (A5 - A3), difference in placebo (P5 - P3)
+  # order of cols is difference in active (A5 - A3), difference in placebo (P5 - P3)
   model_prop_diffs <- model_prop[, c(1, 3)] - model_prop[, c(2, 4)]
   
   # We expect that the difference between the two active arms (A5-A3) will be
@@ -260,12 +260,15 @@ simulate_trial <- function(id_trial = 1){
   
   # id_trial = 1
   
+  message("")
+  message("")
+  
   message(paste0("#################################"))
-  #message(paste0("TRIAL ", id_trial, " SCENARIO ", cfg$scenarioid))
+  message(paste0("TRIAL ", id_trial, " SCENARIO ", cfg$scenarioid))
   message(paste0("#################################"))
   
   # scenario(cfg$scenarioid)
-  scenario(1)
+  scenario(cfg$scenarioid)
 
   # reset data
   tg_env$df <- generate_trial_data()
@@ -358,7 +361,9 @@ starttime <- Sys.time()
 res <- vector(mode = "list", length = cfg$nsims) 
 
 for(i in 1:cfg$nsims){
-  res[[i]] <- simulate_trial()
+  
+  
+  res[[i]] <- simulate_trial(i)
   
   
 }
