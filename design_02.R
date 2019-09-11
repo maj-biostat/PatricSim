@@ -239,8 +239,8 @@ fit_stan <- function(){
   # compute the probability that these two differences are within a threshold of
   # each other. If this probability is high we conclude equivalence.
   tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, 1] - model_prop_diffs[, 2])
-  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, 1] - model_prop_diffs[, 2]) < 0.05)
-  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > 0.975)
+  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, 1] - model_prop_diffs[, 2]) < cfg$equivalence_threshold)
+  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > cfg$decision_probability)
   
   # Alternatively, if this probability was very low we could indicate futile.
   # We could compute the predictive probability of concluding equivalence at the
@@ -249,8 +249,8 @@ fit_stan <- function(){
   # Next, is the proportion that recover under the longer duration placebo
   # equivalent to the proportion that recover under the shorter duration placebo?
   tg_env$mean_p_diff <- mean(model_prop_diffs[, 2])
-  tg_env$prob_p5_eq_p3 <- mean(abs(model_prop_diffs[, 2]) < 0.05)
-  tg_env$p5_eq_p3 <- as.numeric(tg_env$prob_p5_eq_p3 > 0.975)
+  tg_env$prob_p5_eq_p3 <- mean(abs(model_prop_diffs[, 2]) < cfg$equivalence_threshold)
+  tg_env$p5_eq_p3 <- as.numeric(tg_env$prob_p5_eq_p3 > cfg$decision_probability)
 
 }
 
@@ -289,8 +289,8 @@ simulate_trial <- function(id_trial = 1){
     mean_p_diff = tg_env$mean_p_diff,
     prob_a_eq_p = tg_env$prob_a_eq_p,
     prob_p5_eq_p3 = tg_env$prob_p5_eq_p3,
-    a_eq_p = as.numeric(tg_env$prob_a_eq_p > 0.9),
-    p5_eq_p3 = as.numeric(tg_env$prob_p5_eq_p3 > 0.9)
+    a_eq_p = tg_env$a_eq_p,
+    p5_eq_p3 = tg_env$p5_eq_p3
   )
   
   

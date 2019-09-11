@@ -47,6 +47,11 @@ get_cfg <- function(cfgfile = "cfg.yaml"){
     l$nsims <- 3
   }
 
+  
+  l$equivalence_threshold <- tt$equivalence_threshold
+  l$decision_probability <- tt$decision_probability
+  
+  
 
   l
 }

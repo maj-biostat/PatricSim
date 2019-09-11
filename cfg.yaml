@@ -5,7 +5,9 @@
 
 scenarioid: 1
 
+equivalence_threshold: 0.05
 
+decision_probability: 0.8
 
 
 # R Bug - Terminating Line Required - Do not remove
