@@ -426,7 +426,8 @@ rdsfilename <- file.path("out",
                          paste0("design-02-scenario-", cfg$scenarioid, "-",
                                 format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
 
-saveRDS(list(results=dres,
+saveRDS(list(results = dres,
+             trtgrps = tg_env$trtgrps,
              warnings = w,
              starttime = starttime,
              endtime = endtime,
