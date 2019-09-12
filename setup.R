@@ -48,9 +48,10 @@ get_cfg <- function(cfgfile = "cfg.yaml"){
   }
 
   
-  l$equivalence_threshold <- tt$equivalence_threshold
-  l$decision_probability <- tt$decision_probability
-  
+  l$noninf_threshold <- tt$noninf_threshold
+  l$equiv_threshold <- tt$equiv_threshold
+  l$decision_ni_prob <- tt$decision_ni_prob
+  l$decision_eq_prob <- tt$decision_eq_prob
   
 
   l

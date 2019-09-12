@@ -5,9 +5,10 @@
 
 scenarioid: 1
 
-equivalence_threshold: 0.05
+noninf_threshold: -0.05
+equiv_threshold: 0.05
 
-decision_probability: 0.8
-
+decision_ni_prob: 0.9
+decision_eq_prob: 0.9
 
 # R Bug - Terminating Line Required - Do not remove

@@ -53,6 +53,14 @@ grp <- factor(c(
   "A5", "A3", "P5", "P3"
 ))
 
+A5 <- 1
+A3 <- 2
+P5 <- 3
+P3 <- 4
+
+ACTIVE <- 1
+PLACEBO <- 2
+
 # tg_env$trtgrps
 # tg_env$rar_active
 # tmp2 <- tg_env$trtgrps
@@ -172,6 +180,8 @@ p_best <- function(mat) {
 
 fit_stan <- function(){
   
+  
+  # tg_env$df <- generate_trial_data()
   # participant data
   tmp <- tg_env$df %>%
     dplyr::group_by(trt, dur) %>%
@@ -230,27 +240,64 @@ fit_stan <- function(){
   tg_env$trtgrps$prob_best <- p_best(model_mu)
   tg_env$trtgrps$est_prop <- apply(model_prop, 2, mean)
   
-  # now estimate differences: 
-  # order of cols is difference in active (A5 - A3), difference in placebo (P5 - P3)
-  model_prop_diffs <- model_prop[, c(1, 3)] - model_prop[, c(2, 4)]
+  # How about stratifying the analysis by those that jumped to rescue?
+  # Or conditioning on duration to jump to rescue (with zero being didn't).
+  # Urm....
+  # Put this on hold for now.
   
+  # Is the short duration active trt non-inferior to long duration trt
+  # in terms of the proportion that recover by day 7?
+  # There is a worry here that pts on a3 will jump to rescue at day 3 
+  # earlier and then continue treatment which would mean that they have had
+  # a greater trt duration than those on a5 - unless, of course, those on a5
+  # also jumpt to rescue as soon as they finish day 5 :/
+  tg_env$mean_a_diff <- mean(model_prop[, A3] - model_prop[, A5])
+  tg_env$prob_a3_ni_a5 <-  mean(model_prop[, A3] - model_prop[, A5] > cfg$noninf_threshold)
+  tg_env$a3_ni_a5 <- as.numeric(tg_env$prob_a3_ni_a5 > cfg$decision_ni_prob)
+  
+  # Evaluate the placebos following the same process.
+  # Note, to some extent, this should characterise any differential behaviour 
+  # with respect to jumping to the rescue medication.
+  # Note that p3 could have 4 days of rescue med and p5 could have 2 days of
+  # rescue med prior to the day 7 assessment of recovery.
+  tg_env$mean_p_diff <- mean(model_prop[, P3] - model_prop[, P5])
+  tg_env$prob_p3_ni_p5 <- mean(model_prop[, P3] - model_prop[, P5] > cfg$noninf_threshold)
+  tg_env$p3_ni_p5 <- as.numeric(tg_env$prob_p3_ni_p5 > cfg$decision_ni_prob)
+  
+  # Assess equivalence of the difference in differences.
+  # In other words is the difference in active (A3 - A5) equivalent to the
+  # difference in placebo (P3 - P5)?
+  # If there really is no difference between these then we conclude that 
+  # providing antibiotic offers no real benefit.
+  # To be explicit, in the case where there is no difference between durations 
+  # of active treatment we expect that a3 - a5 = 0.
+  # Similarly, we anticipate that p3 - p5 = 0 BUT there is also the possibility
+  # that p3 - p5 > 0 because, on average, the p3 arm participants would reach 
+  # for the rescue medication earlier than the p5 arm. If the rescue medication 
+  # is actually helpful then we could presumably see a situation whereby the 
+  # proportion that recover by day 7 on p3 is greater than the proportion 
+  # that recover by day 7 that were on p5.
+  model_prop_diffs <- model_prop[, c(A3, P3)] - model_prop[, c(A5, P5)]
+  
+  # d1 <- density(model_prop_diffs[,1])
+  # d0 <- density(model_prop_diffs[,2])
+  # plot(d1, ylim = c(0, max(c(d1$y, d0$y))), xlim = c(-0.2, .1))
+  # lines(d0, col = "red")
+
   # We expect that the difference between the two active arms (A5-A3) will be
   # equivalent to the  difference between the two placebo arms (P5-P3) and so we
   # compute the probability that these two differences are within a threshold of
-  # each other. If this probability is high we conclude equivalence.
-  tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, 1] - model_prop_diffs[, 2])
-  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, 1] - model_prop_diffs[, 2]) < cfg$equivalence_threshold)
-  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > cfg$decision_probability)
+  # each other. If this probability is high we might be justified in 
+  # concluding equivalence.
+  tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, ACTIVE] - model_prop_diffs[, PLACEBO])
+  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, ACTIVE] - model_prop_diffs[, PLACEBO]) < cfg$equiv_threshold)
+  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > cfg$decision_eq_prob)
+  
   
   # Alternatively, if this probability was very low we could indicate futile.
   # We could compute the predictive probability of concluding equivalence at the
   # end of the trial.
-
-  # Next, is the proportion that recover under the longer duration placebo
-  # equivalent to the proportion that recover under the shorter duration placebo?
-  tg_env$mean_p_diff <- mean(model_prop_diffs[, 2])
-  tg_env$prob_p5_eq_p3 <- mean(abs(model_prop_diffs[, 2]) < cfg$equivalence_threshold)
-  tg_env$p5_eq_p3 <- as.numeric(tg_env$prob_p5_eq_p3 > cfg$decision_probability)
+  
 
 }
 
@@ -288,15 +335,19 @@ simulate_trial <- function(id_trial = 1){
  
   tibble(
     id = id_trial, 
-    mean_diff_in_diff = tg_env$mean_diff_in_diff,
+    mean_a_diff = tg_env$mean_a_diff,
     mean_p_diff = tg_env$mean_p_diff,
+    mean_diff_in_diff = tg_env$mean_diff_in_diff,
+    
+    prob_a3_ni_a5 = tg_env$prob_a3_ni_a5,
+    prob_p3_ni_p5 = tg_env$prob_p3_ni_p5,
     prob_a_eq_p = tg_env$prob_a_eq_p,
-    prob_p5_eq_p3 = tg_env$prob_p5_eq_p3,
-    a_eq_p = tg_env$a_eq_p,
-    p5_eq_p3 = tg_env$p5_eq_p3
+    
+    a3_ni_a5 = tg_env$a3_ni_a5,
+    p3_ni_p5 = tg_env$p3_ni_p5,
+    a_eq_p = tg_env$a_eq_p
   )
-  
-  
+
 }
 
 figs <- function(){
@@ -344,8 +395,6 @@ figs <- function(){
 }
 
 
-
-
 # main loop
 # 
 
@@ -362,18 +411,14 @@ res <- vector(mode = "list", length = cfg$nsims)
 
 for(i in 1:cfg$nsims){
   
-  
   res[[i]] <- simulate_trial(i)
-  
   
 }
 
 dres <- do.call(rbind, res)
 
 endtime <- Sys.time()
-
 difftime(endtime, starttime, units = "hours")
-
 beepr::beep()
 w <- warnings()
 
