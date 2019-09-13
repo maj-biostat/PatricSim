@@ -289,8 +289,10 @@ fit_stan <- function(){
   # compute the probability that these two differences are within a threshold of
   # each other. If this probability is high we might be justified in 
   # concluding equivalence.
-  tg_env$mean_diff_in_diff <- mean(model_prop_diffs[, ACTIVE] - model_prop_diffs[, PLACEBO])
-  tg_env$prob_a_eq_p <- mean(abs(model_prop_diffs[, ACTIVE] - model_prop_diffs[, PLACEBO]) < cfg$equiv_threshold)
+  diff_in_diffs <- model_prop_diffs[, ACTIVE] - model_prop_diffs[, PLACEBO]
+  tg_env$mean_diff_in_diff <- mean(diff_in_diffs)
+  tg_env$prob_a_eq_p <- mean(diff_in_diffs > -cfg$equiv_threshold & 
+                               diff_in_diffs < cfg$equiv_threshold)
   tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > cfg$decision_eq_prob)
   
   
