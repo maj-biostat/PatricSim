@@ -239,7 +239,7 @@ generate_trial_data <- function() {
   dat$rescue_sought <- 0
   dat$rescue_sought[dat$id %in% idx_failures] <- 1
   
-  gmodels::CrossTable(dat$rescue_sought, dat$grp)
+  # gmodels::CrossTable(dat$rescue_sought, dat$grp)
 
   dat$y_orig <- dat$y
   dat$y[dat$id %in% idx_failures] <- 0
@@ -259,7 +259,7 @@ fit_stan <- function(){
   # tg_env$df <- generate_trial_data()
   
   #
-  gmodels::CrossTable(tg_env$df$y, tg_env$df$grp)
+  # gmodels::CrossTable(tg_env$df$y, tg_env$df$grp)
   
   # participant data
   tmp <- tg_env$df %>%
