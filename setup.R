@@ -44,7 +44,7 @@ get_cfg <- function(cfgfile = "cfg.yaml"){
   if("nsims" %in% names(opt)){
     l$nsims <- opt$nsims
   } else {
-    l$nsims <- 3
+    l$nsims <- tt$nsims
   }
 
   

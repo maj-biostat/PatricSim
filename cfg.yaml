@@ -3,7 +3,9 @@
 # 1. Final blank line required
 # 2. Never __EVER__ use TAB characters
 
-scenarioid: 1
+scenarioid: 4
+
+nsims: 10
 
 noninf_threshold: -0.05
 equiv_threshold: 0.05

@@ -75,12 +75,12 @@ tg_env$model_code <- rstan::stan_model(file = "logistic_02.stan",
 
 
 
-
 scenario <- function(idx = 1){
-  # idx = 1
+  # idx = 4
   tg_env$trtgrps <- tibble(
     prob_best = rep(1/length(grp), length(grp)),
     true_mean = rep(0.8, length(grp)),
+    prop_rescue = c(0, 0, 0, 0),
     n = 0,
     trt = as.numeric(substr(grp, 1, 1) == "A"),
     grp = grp,
@@ -100,17 +100,71 @@ scenario <- function(idx = 1){
   } else if(idx == 3) {
     # all same - low prob of recovery
     tg_env$trtgrps$true_mean = rep(0.6, length(grp))
-  } 
-  else if(idx == 4) {
-    # placebo 3 days reaches for rescue earlier than p5 and therefore
-    # gets higher proportion recovered.
-    tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.6)
+  } else if(idx == 4){
+    
+    
+    # assume antibiotics no better than placebo
+    # and say 50% have day 7 recovery regardless of the treatment
+    
+    # participants that jump to rescue are considered a failure
+    
+    # there will be lower proportion of people recovered at day 3 
+    # than day 5 so conclude that there would be more people 
+    # jumping to rescue in the 3 day regimes compared to the day 5 
+    # regimes
+    
+    # set 30% of 5 day regime to failure (150)
+    # set 40% of 3 day regime to failure (200)
+    
+    tg_env$trtgrps$true_mean = rep(0.5, length(grp))
+    tg_env$trtgrps$prop_rescue = c(0.3, 0.4, 0.3, 0.4)
+    
+    
   } else if(idx == 5) {
-    # 5 days active better than 3. 
-    # placebo 3 days reaches for rescue earlier than p5 and therefore
-    # gets higher proportion recovered.
-    tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.6)
+    
+    # assume antibiotics do work better than placebo
+    # but there is no duration effect 
+    # of those on antibiotics, 70% recover by day 7
+    # of those on placebo, 50% recover by daty 7
+    
+    # anyone that jumps to rescue is considered a failure
+    
+    # now, again,
+    # there will be lower proportion of people recovered at day 3 
+    # than day 5 so conclude that there would be more people 
+    # jumping to rescue in the 3 day regimes compared to the day 5 
+    # regimes
+    
+    tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.5)
+    tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
+    
+    
+  }
+  else if(idx == 6) {
+
+    # assume antibiotics do work better than placebo
+    # and there is a duration effect of those on antibiotics
+    # Let 70% recover by day 7 if they are on the 5 day regime and
+    # 60% recover by day 7 if they are on the 3 day regime.
+    
+    # For those on placebo assume a 50% recovery by day 7
+    
+    # again,
+    # there will be lower proportion of people recovered at day 3 
+    # than day 5 so conclude that there would be more people 
+    # jumping to rescue in the 3 day regimes compared to the day 5 
+    # regimes 
+    
+    tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.5)
+    tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
   } 
+  
+  # else if(idx == 7) {
+  #   # 5 days active better than 3. 
+  #   # placebo 3 days reaches for rescue earlier than p5 and therefore
+  #   # gets higher proportion recovered.
+  #   tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.6)
+  # } 
 }
 
 
@@ -133,6 +187,8 @@ generate_trial_data <- function() {
                                  conditions = grp)
   
   dat$grp <- unlist(list(grp1, grp2))
+  
+  dat$grp_num <- as.numeric(dat$grp)
   
   message(paste0("Groups produced by randomizr ", length(unique(dat$grp))))
 
@@ -168,6 +224,25 @@ generate_trial_data <- function() {
     }
   }
 
+  # gmodels::CrossTable(dat$y, dat$grp)
+  
+  dat$prop_rescue <- tg_env$trtgrps$prop_rescue[dat$grp_num]
+  
+  idx_failures <- dat %>%
+    dplyr::group_by(grp) %>%
+    dplyr::sample_frac(size = prop_rescue) %>%
+    dplyr::ungroup() %>%
+    dplyr::pull(id)
+  # split by trt group
+  # sample prop_rescue records and set y to zero
+  
+  dat$rescue_sought <- 0
+  dat$rescue_sought[dat$id %in% idx_failures] <- 1
+  
+  gmodels::CrossTable(dat$rescue_sought, dat$grp)
+
+  dat$y_orig <- dat$y
+  dat$y[dat$id %in% idx_failures] <- 0
   dat
 }
 
@@ -182,6 +257,10 @@ fit_stan <- function(){
   
   
   # tg_env$df <- generate_trial_data()
+  
+  #
+  gmodels::CrossTable(tg_env$df$y, tg_env$df$grp)
+  
   # participant data
   tmp <- tg_env$df %>%
     dplyr::group_by(trt, dur) %>%
@@ -233,7 +312,7 @@ fit_stan <- function(){
   # order is: A5 A3 P5 P3
   model_prop <- apply(model_mu, 2, function(x) exp(x)/(1+exp(x)))
   # sanity check - should be close to the true means used to generate the data
-  # colMeans(model_prop)
+  colMeans(model_prop)
 
   tg_env$trtgrps$est_logodds <- apply(model_mu, 2, mean)
   tg_env$trtgrps$est_var <- diag(var(model_mu))
@@ -321,6 +400,9 @@ simulate_trial <- function(id_trial = 1){
 
   # reset data
   tg_env$df <- generate_trial_data()
+  
+  # gmodels::CrossTable(tg_env$df$rescue_sought, tg_env$df$grp)
+  # gmodels::CrossTable(tg_env$df$y, tg_env$df$grp)
   
   tg_env$trtgrps$n <- tg_env$df %>%
     dplyr::group_by(grp) %>%
@@ -421,14 +503,15 @@ dres <- do.call(rbind, res)
 
 endtime <- Sys.time()
 difftime(endtime, starttime, units = "hours")
-beepr::beep()
+# beepr::beep()
 w <- warnings()
 
 rdsfilename <- file.path("out",
                          paste0("design-02-scenario-", cfg$scenarioid, "-",
                                 format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
 
-saveRDS(list(results = dres,
+saveRDS(list(scenario = cfg$scenarioid,
+             results = dres,
              trtgrps = tg_env$trtgrps,
              warnings = w,
              starttime = starttime,

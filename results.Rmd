@@ -1,0 +1,180 @@
+---
+title: "PATRIC"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    classoption: portrait
+    number_sections: no
+    self_contained: yes
+    theme: united
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: '3'
+geometry: left=0.2cm,right=0.2cm,top=1cm,bottom=1cm
+editor_options:
+  chunk_output_type: console
+classoption: landscape
+---
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+# rmarkdown::render("simulation_report.Rmd", clean=TRUE)
+knitr::opts_chunk$set(echo = TRUE, fig.path = 'figs/')
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(psych))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(htmltools))
+#source("util.R")
+
+
+
+ggplot2::theme_set(ggplot2::theme_bw())
+ggplot2::theme_update(text = element_text(size = 10))
+ggplot2::theme_update(legend.position = "top")
+# ggplot2::theme_update(legend.title = element_blank())
+ggplot2::theme_update(axis.text.x = element_text(size = 10))
+ggplot2::theme_update(axis.text.y = element_text(size = 10))
+
+# Work|Right|Fast
+# rmarkdown::render("simulation_report.Rmd", clean=TRUE)
+```
+
+
+```{r, echo = F, include=FALSE}
+mywarnings <- list()
+
+post_final_thresh <- 0
+
+resfiles <- list.files("out", pattern = "*.RDS")
+
+df_all <- data.frame(stringsAsFactors = F)
+
+mysim <- 1
+# fname = resfiles[1]
+for(fname in resfiles){
+  
+  l1 <- readRDS(file.path(getwd(), "out", fname))
+  # d1 <- readRDS(file.path(getwd(), "out", resfiles[1]))
+
+  df_res <- as.data.frame(l1$results)
+
+  # true values for median surv (mnth)
+  true_mean <- l1$trtgrps$true_mean
+  names(true_mean) <- as.character(l1$trtgrps$grplab)
+  prop_rescue  <- l1$trtgrps$prop_rescue
+  names(prop_rescue) <- as.character(l1$trtgrps$grplab)
+  est_prob  <- l1$trtgrps$est_prop
+  names(est_prob) <- as.character(l1$trtgrps$grplab)
+  
+
+  mean(df_res$mean_a_diff > 0)
+  mean(df_res$mean_p_diff > 0)
+  mean(df_res$mean_diff_in_diff > 0)
+  
+  mean(df_res$a3_ni_a5)
+  mean(df_res$p3_ni_p5)
+  mean(df_res$a_eq_p)
+  
+  dtmp <- t(cbind(c(true_mean, prop_rescue, est_prob)))
+  
+  scen <- ifelse(is.null(l1$scenario), NA, l1$scenario)
+  
+  dtmp <- cbind(dtmp, 
+                a3_gt_a5 = mean(df_res$mean_a_diff > 0),
+                p3_gt_p5 = mean(df_res$mean_p_diff > 0),
+                diff_a_gt_diff_p = mean(df_res$mean_diff_in_diff > 0),
+                a3_ni_a5 = mean(df_res$a3_ni_a5),
+                p3_ni_p5 = mean(df_res$p3_ni_p5),
+                a_eq_p = mean(df_res$a_eq_p),
+                scenario = scen)
+
+  df_all <- rbind(df_all,  dtmp, stringsAsFactors  = F)
+
+}
+
+
+options(knitr.kable.NA = '-')
+showwarn <- length(mywarnings > 0)
+
+#max_file_date <- as.POSIXct("2019-03-13 23:11:48")
+
+```
+
+## Design 2
+
+Each participant receives a bottle containing one of 5 days antibiotic, 3 days antibiotic, 5 days placebo or 3 days placebo. 
+
+All receive a prescription for rescue medication, which could be obtained at any time. 
+
+We would know that the prescription had been filled (and the date at which it was filled) but we would not know whether it was taken or whether a full dose had been taken.
+
+If a participant reaches for the rescue medication (regardless of whether they are on the active or placebo arms) they are considered a failure, i.e. considered that they had not recovered at day 7 regardless of whether they did or did not.
+
+Initially am using a non-inferiority margin equal to 0.05, equivalence 0.05. 
+
+The decision thresholds for NI is 0.9 and equivalence is 0.6.
+
+
+## Results and commentary
+
+In scenario 4 all arms have a true recover probability of 0.7. Patients on the 3 day regimes are assumed to jump to rescue sooner and therefore in aggregate more people in the 3 day duration jump to rescue. Since people who jump to rescue are considered failures, we anticipate that we would see (and estimate) that proportion that recovered in the 3 day regimes would be lower than the proportion recovered in the 5 day regimes. The simulation results confirms that this is the case. The implications include (1) the probability that day 3 regimes are greater than day 5 regimes is negligible (2) the probability that day 3 regimes are non-inferior to day 5 regimes is negligible, and (3) the probability that the difference between the active arms and the difference between the placebo are equivalent is quite high.
+
+
+```{r, echo = F}
+digits <- c(rep(3, 14))
+kable(df_all,
+      caption = paste0("Table. Simulation Results (", nrow(df_all), " rows)"),
+      col.names = c("A5", "A3", "P5", "P3", 
+                    "A5", "A3", "P5", "P3", 
+                    "A5", "A3", "P5", "P3", 
+                    "",
+                    "",    
+                    "",
+                    "",
+                    "",
+                    "",
+                    ""),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position") %>%
+  add_header_above(c("True recovery" = 4, 
+                     "True rescue" = 4, 
+                     "Est. recovery" = 4, 
+                     "P(a3 gt a5)" = 1, 
+                     "P(p3 gt p5)" = 1, 
+                     "P(d1 > d0)" = 1, 
+                     "P(a3 ni a5)" = 1,
+                     "P(p3 ni p5)" = 1,
+                     "P(d1 eq d0)" = 1,
+                     "Scenario"    = 1))
+```
+
+
+
+
+
+
+
+
+
+
+
