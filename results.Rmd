@@ -99,10 +99,11 @@ for(fname in resfiles){
   dtmp <- cbind(dtmp, 
                 a3_gt_a5 = mean(df_res$mean_a_diff > 0),
                 p3_gt_p5 = mean(df_res$mean_p_diff > 0),
-                diff_a_gt_diff_p = mean(df_res$mean_diff_in_diff > 0),
+    
                 a3_ni_a5 = mean(df_res$a3_ni_a5),
                 p3_ni_p5 = mean(df_res$p3_ni_p5),
                 a_eq_p = mean(df_res$a_eq_p),
+                diff_a_eq_diff_p = mean(df_res$diff_a_eq_diff_p),
                 scenario = scen)
 
   df_all <- rbind(df_all,  dtmp, stringsAsFactors  = F)
@@ -125,7 +126,7 @@ All receive a prescription for rescue medication, which could be obtained at any
 
 Arbitrarily, the non-inferiority margin is set to 0.05, and equivalence is set to -0.05 to 0.05. The decision threshold for NI is 0.9 and for equivalence is 0.6.
 
-The results do not include any attempt to estimate bias and use that estimate to adjust comparisons.
+The results do not include any attempt to use estimates of bias in the adjustment of comparisons.
 
 
 ## Results
@@ -157,53 +158,52 @@ kable(df_all,
                      "Est. recovery" = 4, 
                      "P(a3 gt a5)" = 1, 
                      "P(p3 gt p5)" = 1, 
-                     "P(d1 > d0)" = 1, 
                      "P(a3 ni a5)" = 1,
                      "P(p3 ni p5)" = 1,
+                     "P(a eq q)" = 1,
                      "P(d1 eq d0)" = 1,
                      "Scenario"    = 1))
 ```
 
-Columns are:
+Columns:
 
 + 1 to 4 the probability of recovery used in generating the simulated data for each regime
 + 5 to 8 the probability of taking the rescue medication used in generating the simulated data
 + 9 to 12 the estimated proportion that recover by day 7. Note that if we have been able to recover the parameters, these values will be approximately equal to the values in columns 1 to 4.
-+ 13 to 14 the probability that the 3 day regime has greater proportion recovering by day 7 for the antibiotics and placebo respectively. Note that if the two regimes are equal we would expect this to be around 0.5.
-+ 15 the probability that the difference between the two antibiotic regimes is greater than the difference between the two placebo regimes. Note that if the two differences are equal we would expect this to be around 0.5.
-+ 16 to 17 the probability that the 3 day regime is non-inferior to the 5 day regime for the antibiotic and placebo respectively. Note this assume an (arbitrary) non-inferiority margin of 0.05 and requires that the probability that the 3 day regime is above this margin to be 0.9.
++ 13 to 14 the probability that the 3 day regimes have a greater proportion recovering by day 7 than the 5 day regimes for the antibiotics and placebo respectively. Note that if the two regimes are equal we would expect this probability to be around 0.5.
++ 15 to 16 the probability that the 3 day regimes are non-inferior to the 5 day regimes for the antibiotic and placebo respectively. Note we assume an (arbitrary) non-inferiority margin of 0.05 and require that the probability that the 3 day regime is above this margin to be 0.9.
++ 17 the probability that the pooled data for the antibiotic regimes (i.e. 3 day and 5 day regimes) are equivalent to the pooled data for the placebo regimes. To assess this we require that 60% of the probability mass for the difference in differences is between -0.05 and 0.05.
 + 18 the probability that the difference between the two antibiotic regimes is equivalent to the difference between the two placebo regimes. To assess this we require that 60% of the probability mass for the difference in differences is between -0.05 and 0.05.
-+ 19 the scenario number
 
 ## Commentary
 
 ### Scenarios 1 to 4
 
-For scenarios 1 to 4, we simulate based on a true probability of recovery between 0.5 and 0.8. We assume none of the participants take the rescue medication. The parameters are reasonably well recovered by the model. The probability that 3 day regimes are greater than the 7 day regimes are as expected (approximately 0.5). The probabilities of being able to state that the (within treatment status), 3 day regime is non-inferior to the 5 day duration are between 0.75 and 0.8. The probability of being able to state that the difference in differences are equivalent is approximately 0.77.
+For scenarios 1 to 4, we simulate using a probability of recovery between 0.5 and 0.8. We assume none of the participants take the rescue medication. The parameters are reasonably well recovered by the model. The probability that 3 day regimes are greater than the 7 day regimes are approximately 0.5, as expected. The probabilities of being able to state that the (within treatment status) 3 day regime is non-inferior to the 5 day duration are between 0.6 and 0.8. The probability that the antibiotic and placebo regimes are equivalent ranges from 0.8 to above 0.95. The probability of being able to state that the difference in differences are equivalent is approximately 0.5 to 0.7.
 
 ### Scenarios 5
 
-In scenario 5, all arms were simulated using a recovery probability of 0.5. Patients on the 3 day regimes are assumed to jump to rescue sooner and therefore in aggregate more people in the 3 day regimes jump to the rescue prescription.
+In scenario 5, all arms were simulated using a recovery probability of 0.5 and thus represent no difference in terms of recovery regardless of whether treated with antibiotic or placebo. We might reasonably expect that less patients have recovered by day 3 than day 5. Therefore, more patients on the 3 day regimes are assumed to take the rescue compared to patients on the 5 day regimes.
 
-Since people who jump to rescue are considered failures, we anticipate that we would see (and estimate) that proportion that recovered in the 3 day regimes would be lower than the proportion recovered in the 5 day regimes. The simulation results confirms that this is the case. 
+Since people who take the rescue are considered failures, we anticipate that we would see (and estimate) that proportion recovering in the 3 day regimes would be lower than the proportion recovering in the 5 day regimes. The simulation results confirms that this is the case. 
 
-The results show that (1) the probability that day 3 regimes are greater than day 5 regimes is negligible (2) the probability that day 3 regimes are non-inferior to day 5 regimes is negligible, and (3) the probability that the difference between the active arms and the difference between the placebo are equivalent is approximately 0.7.
+The results show that (1) the probability that day 3 regimes are greater than day 5 regimes is near zero (2) the probabilities that 3 day regimes are non-inferior to day 5 regimes are near zero, and (3) the probability that the proportion recovered in the pooled antibiotic group is equivalent to the proportion recovered in the pooled placebo group is high and (4) the probability that the difference between the active arms and the difference between the placebo are equivalent is approximately 0.7.
 
 ### Scenarios 6
 
-In scenario 6, we simulate data assuming that the antibiotics improve recovery but the duration differential of 2 days does not matter. Specifically we simulate data using a probability of recovery equal to 0.7 in the antibiotic regimes and 0.5 in the placebo regimes. Using the same rationale as in scenario 5 we set the proportions that jump to rescue to be 0.3 and 0.4 for the 5 day and 3 day regimes respectively. 
+In scenario 6, we simulate data assuming that the antibiotics improve recovery but the duration differential of 2 days does not matter. Specifically, we simulate data using a probability of recovery equal to 0.7 in the antibiotic regimes and 0.5 in the placebo regimes. Using the same rationale as in scenario 5 we set the proportions that take the rescue to 0.3 and 0.4 for the 5 day and 3 day regimes respectively. 
 
-The results suggest that (1) the estimates for the placebo regimes are biased (2) the probability that day 3 antibiotic regime is greater than the day 5 regime is 0.5 as expected (3) the probability that the day 3 placebo regime is greater than the day 5 regime is very small (and biased) (4) the probability that the difference between the antibiotic regimes is greater than the difference between the placebo regimes is 0.9 (and biased) (5) the probability that the 3 day antibiotic regime is non-inferior to the 5 day regime is approximately 0.7 (6) the probability that the 3 day placebo regime is non-inferior to the 5 day regime is very low (and biased).
+The results suggest that (1) the estimates for the placebo regimes are biased (2) the probability that day 3 antibiotic regime is greater than the day 5 regime is 0.5 as expected (3) the probability that the day 3 placebo regime is greater than the day 5 regime is near zero and therefore biased (4) the probability that the 3 day antibiotic regime is non-inferior to the 5 day regime is approximately 0.7 (5) the probability that the 3 day placebo regime is non-inferior to the 5 day regime is near zero and biased (6) the probability that the pooled antibiotic regimes are equivalent to the pooled placebos is near zero and (7) the probability that the difference between the active arms and the difference between the placebo are equivalent is approximately 0.35.
 
 ### Scenarios 7
 
-In scenario 7, we simulate data assuming that the antibiotics improve recovery AND the duration differential of 2 days matters. Specifically, we simulate data using a probability of recovery equal to 0.7 in 5 day antibiotic regime and 0.6 in the 3 day antibiotic regimes. Using the same rationale as in scenario 5 we set the proportions that jump to rescue to be  0.3 and 0.4 for the 5 day and 3 day regimes respectively. 
+In scenario 7, we simulate data assuming that the antibiotics improve recovery AND the duration differential of 2 days matters. Specifically, we simulate data using a probability of recovery equal to 0.7 in the 5 day antibiotic regime and 0.6 in the 3 day antibiotic regimes. Using the same rationale as in scenario 5 we set the proportions that jump to rescue to be  0.3 and 0.4 for the 5 day and 3 day regimes respectively. 
 
-The results suggest that (1) the probability that the 3 day antibiotic regime is greater than the 5 day regime is low (as expected) (2) the probability that the 3 day placebo regime is greater than the 5 day regime is biased (3) the probability that the antibiotic differences are greater than the placbo differences is biased (4) the probability that the 3 day antibiotic regime is non-inferior to the 4 day regime is low, as expected (5) the probability that the 3 day placebo regime is non-inferior to the 4 day regime is biased.
+The results suggest that (1) the probability that the 3 day antibiotic regime is greater than the 5 day regime is near zero (2) the probability that the 3 day placebo regime is greater than the 5 day regime is near zero and biased (3) the probability that the 3 day antibiotic regime is non-inferior to the 5 day regime is near zero, as expected (4) the probability that the 3 day placebo regime is non-inferior to the 4 day regime is near zero and biased (5) the probability that the antibiotic regimes are equivalent to the placebo regimes is near zero and (7) the probability that the difference between the active arms and the difference between the placebo are equivalent is approximately 0.35.
 
 ## Conclusion
 
-In plausible pathological scenarios, this approach will not enable us to recover the parameters of the underlying data generation process.
+In plausible pathological scenarios, this approach will not enable us to recover the parameters of the underlying data generation process and inference for some comparisons will be biased.
 
 
 

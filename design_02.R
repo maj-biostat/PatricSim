@@ -136,7 +136,7 @@ scenario <- function(idx = 1){
     # regimes
     
     tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.5)
-    tg_env$trtgrps$prop_rescue = c(0, 0, 0.4, 0.4)
+    tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
     
     
   }
@@ -342,6 +342,16 @@ fit_stan <- function(){
   tg_env$prob_p3_ni_p5 <- mean(model_prop[, P3] - model_prop[, P5] > cfg$noninf_threshold)
   tg_env$p3_ni_p5 <- as.numeric(tg_env$prob_p3_ni_p5 > cfg$decision_ni_prob)
   
+  # comparison of treatment vs placebo head to head using data pooled across durations
+  model_pooled <- matrix(c(model_prop[, A3], model_prop[, A5], 
+    model_prop[, P3], model_prop[, P5]), ncol = 2, byrow = F)
+  diffs <- model_pooled[, ACTIVE] - model_pooled[, PLACEBO]
+  
+  tg_env$mean_diff <- mean(model_pooled[, ACTIVE] - model_pooled[, PLACEBO])
+  tg_env$prob_a_eq_p <- mean(diffs > -cfg$equiv_threshold & 
+                               diffs < cfg$equiv_threshold)
+  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > cfg$decision_eq_prob)
+  
   # Assess equivalence of the difference in differences.
   # In other words is the difference in active (A3 - A5) equivalent to the
   # difference in placebo (P3 - P5)?
@@ -369,9 +379,9 @@ fit_stan <- function(){
   # concluding equivalence.
   diff_in_diffs <- model_prop_diffs[, ACTIVE] - model_prop_diffs[, PLACEBO]
   tg_env$mean_diff_in_diff <- mean(diff_in_diffs)
-  tg_env$prob_a_eq_p <- mean(diff_in_diffs > -cfg$equiv_threshold & 
+  tg_env$prob_diff_a_eq_diff_p <- mean(diff_in_diffs > -cfg$equiv_threshold & 
                                diff_in_diffs < cfg$equiv_threshold)
-  tg_env$a_eq_p <- as.numeric(tg_env$prob_a_eq_p > cfg$decision_eq_prob)
+  tg_env$diff_a_eq_diff_p <- as.numeric(tg_env$prob_diff_a_eq_diff_p > cfg$decision_eq_prob)
   
   
   # Alternatively, if this probability was very low we could indicate futile.
@@ -390,9 +400,9 @@ simulate_trial <- function(id_trial = 1){
   message("")
   message("")
   
-  message(paste0("#################################"))
-  message(paste0("TRIAL ", id_trial, " SCENARIO ", cfg$scenarioid))
-  message(paste0("#################################"))
+  message(paste0("###########################################"))
+  message(paste0("  TRIAL ", id_trial, " of ", cfg$nsims, " SCENARIO ", cfg$scenarioid))
+  message(paste0("###########################################"))
   
   # scenario(cfg$scenarioid)
   scenario(cfg$scenarioid)
@@ -420,15 +430,16 @@ simulate_trial <- function(id_trial = 1){
     id = id_trial, 
     mean_a_diff = tg_env$mean_a_diff,
     mean_p_diff = tg_env$mean_p_diff,
-    mean_diff_in_diff = tg_env$mean_diff_in_diff,
+    mean_diff   = tg_env$mean_diff,
     
     prob_a3_ni_a5 = tg_env$prob_a3_ni_a5,
     prob_p3_ni_p5 = tg_env$prob_p3_ni_p5,
-    prob_a_eq_p = tg_env$prob_a_eq_p,
+    prob_diff_a_eq_diff_p = tg_env$prob_diff_a_eq_diff_p,
     
     a3_ni_a5 = tg_env$a3_ni_a5,
     p3_ni_p5 = tg_env$p3_ni_p5,
-    a_eq_p = tg_env$a_eq_p
+    a_eq_p = tg_env$a_eq_p,
+    diff_a_eq_diff_p = tg_env$diff_a_eq_diff_p
   )
 
 }
