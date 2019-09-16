@@ -101,13 +101,14 @@ scenario <- function(idx = 1){
     # all same - low prob of recovery
     tg_env$trtgrps$true_mean = rep(0.6, length(grp))
   } else if(idx == 4){
+    tg_env$trtgrps$true_mean = rep(0.5, length(grp))
+  }else if(idx == 5){
     
-    
-    # assume antibiotics no better than placebo
-    # and say 50% have day 7 recovery regardless of the treatment
+    # assume antibiotics are no better than placebo
+    # assume 50% have day 7 recovery regardless of the treatment regime
     
     # participants that jump to rescue are considered a failure
-    
+
     # there will be lower proportion of people recovered at day 3 
     # than day 5 so conclude that there would be more people 
     # jumping to rescue in the 3 day regimes compared to the day 5 
@@ -120,7 +121,7 @@ scenario <- function(idx = 1){
     tg_env$trtgrps$prop_rescue = c(0.3, 0.4, 0.3, 0.4)
     
     
-  } else if(idx == 5) {
+  } else if(idx == 6) {
     
     # assume antibiotics do work better than placebo
     # but there is no duration effect 
@@ -128,19 +129,18 @@ scenario <- function(idx = 1){
     # of those on placebo, 50% recover by daty 7
     
     # anyone that jumps to rescue is considered a failure
-    
-    # now, again,
+
     # there will be lower proportion of people recovered at day 3 
     # than day 5 so conclude that there would be more people 
     # jumping to rescue in the 3 day regimes compared to the day 5 
     # regimes
     
     tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.5)
-    tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
+    tg_env$trtgrps$prop_rescue = c(0, 0, 0.4, 0.4)
     
     
   }
-  else if(idx == 6) {
+  else if(idx == 7) {
 
     # assume antibiotics do work better than placebo
     # and there is a duration effect of those on antibiotics
@@ -149,11 +149,10 @@ scenario <- function(idx = 1){
     
     # For those on placebo assume a 50% recovery by day 7
     
-    # again,
     # there will be lower proportion of people recovered at day 3 
     # than day 5 so conclude that there would be more people 
     # jumping to rescue in the 3 day regimes compared to the day 5 
-    # regimes 
+    # regimes
     
     tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.5)
     tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
