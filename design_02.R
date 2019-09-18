@@ -9,18 +9,18 @@
 
 # This is a single bottle design.
 
-# Randomisation is fixed (non blocked) for each arm throughout the trial up to 
-# a sample size of 500.
-# No adaptations are in place and a single analysis occurs at n = 500.
+# Randomisation is fixed (and balanced) for each arm throughout the trial up to 
+# a sample size of 2000.
+# No adaptations are in place and a single analysis occurs at n = 2000.
 # The response is binary, representing whether a participant recovered
 # by day 7 or not. 
 
-# A simple logistic regression model is used for the analysis. Terms are 
-# included for the intercept, the status of the intervention (active vs placebo)
-# and the duration of the intervention (3 and 5 days).
+# A simple logistic regression model is used for the analysis, thus we 
+# do not accommodate censoring. 
+# Terms are included for the intercept, the status of the intervention 
+# (active vs placebo) and the duration of the intervention (3 and 5 days).
 
-# At the end of the trial we compare .
-
+# The final analyses centres on non-inferiority and equivalence.
 
 # library(brms)
 library(configr)
