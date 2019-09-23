@@ -5,11 +5,11 @@
 
 # https://www.researchgate.net/post/dose_response_curves_is_better_to_create_different_models_or_just_one
 # DRC: make sure you are using the right function, as the drc
-# can provide a number of drc_logistical fits, ie. Weibull, logistic, drc_logistic.
+# can provide a number of drc_loglogistical fits, ie. Weibull, logistic, drc_loglogistic.
 
 # The next step is to describe your data in the most parsimonious way -  this
 # means that you are required to do a model reduction. In your example you have
-# shown a five parameter drc_logistic function, which will have to be compared
+# shown a five parameter drc_loglogistic function, which will have to be compared
 # with a four, a three and perhaps also a two parameter model.
 
 # When reducing your model, various parameters become 0. In the instance of your
@@ -62,20 +62,17 @@ print_tg_env <- function(){
 
 
 # f(dose) = C + [(D-C) / (1 + exp(B * (dose - I)))]
-drc_logistic <- function(dose = 1, ed50 = 5, slope = 1, lwr = 0.2, upr = 0.7){
+drc_loglogistic <- function(dose = 1, ed50 = 4, slope = 4, lwr = 0.2, upr = 0.7){
   numer = upr - lwr
-  denom = 1 + exp(-slope * (dose - ed50))
-  res = lwr + (numer / denom);
+  denom = 1 + exp(slope * (log(dose) - log(ed50)))
+  res = lwr + (numer / denom)
   res
 }
 
 
-# dose = (c(0, 2, 3, 5, 7))
-# plot(dose, drc_logistic(dose, ed50 = 4, slope = 2.8, lwr = 0.2, upr = 0.8), ylim = c(0, 1))
-# plot(dose, drc_logistic(dose, ed50 = 4, slope = 1.3, lwr = 0.2, upr = 0.8), ylim = c(0, 1))
-# plot(c(0, 2, 3, 5, 7), drc_logistic(c(0, 2, 3, 5, 7), ed50 = 8, slope = 1.3, lwr = 0.2, upr = 0.4), ylim = c(0, 1))
-# idx = 1; dose = (c(0, 3, 5)); ed50 = (5); slope = 1; lwr = 0.2; upr = 0.8
-# drc_logistic(dose, ed50, slope, lwr, upr)
+dose = 0:10; ed50 = 3.5; slope = -3; lwr = 0.2;  upr = 0.8
+drc_loglogistic(dose, ed50, slope, lwr, upr)
+plot(dose, drc_loglogistic(dose, ed50, slope, lwr, upr), ylim = c(0, 1))
 
 scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), ed50 = 5, 
                      slope = 1, lwr = 0.2, upr = 0.8){
@@ -88,7 +85,7 @@ scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), ed50 = 5,
   
   tg_env$trtgrps <- tibble(
     prob_best = rep(1/length(dose), length(dose)),
-    true_mu = drc_logistic(dose, ed50, slope, lwr, upr),
+    true_mu = drc_loglogistic(dose, ed50, slope, lwr, upr),
     prop_rescue = rep(0, length(dose)),
     dose = dose,
     dose_idx = 1:length(dose),
@@ -145,17 +142,19 @@ p_best <- function(mat) {
 
 fit_stan <- function(){
   
-  # n_per_arm = 100; idx = 1; dose = c(0, 2, 3, 5,7); ed50 = 5; slope = 1; lwr = 0.2; upr = 0.8
+  # idx = 1; dose = c(0, 2, 3, 5, 7); ed50 = 4; slope = -2; lwr = 0.2; upr = 0.8
   # scenario(idx, dose, ed50, slope, lwr, upr)
   
   print_tg_env()
   
-  # tg_env$df <- generate_trial_data(n_per_arm = 200)
+  # tg_env$df <- generate_trial_data(n_per_arm = 100)
   # gmodels::CrossTable(tg_env$df$y, tg_env$df$dose)
   # tg_env$model_code <- rstan::stan_model(file = "logistic_03.stan", auto_write = TRUE)
+  # tg_env$model_code <- rstan::stan_model(file = "logistic_03b.stan", auto_write = TRUE)
   
   
   # participant data
+  # tg_env$df <- generate_trial_data(n_per_arm = 200)
   tmp <- tg_env$df %>%
     dplyr::group_by(dose) %>%
     dplyr::summarise(y = sum(y),
@@ -189,13 +188,13 @@ fit_stan <- function(){
                                chains = 1, 
                                iter = 10000,
                                refresh = 10000,
-                               seed = ifelse(!exists("interim_seed"), 1, interim_seed),
                                control = list(adapt_delta = 0.99),
                                verbose = T)
-  
-  print_tg_env()
   print(model_fit, digits = 3)
+  print_tg_env()
   
+  plot(model_fit, plotfun = "stan_trace")
+
   pairs(model_fit, pars = c("slope", "ed50", "lwr", "upr"))
   pairs(model_fit, pars = "yhat")
   

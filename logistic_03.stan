@@ -44,10 +44,17 @@ parameters {
 transformed parameters {
 
   real<lower=0,upper=1> yhat[N];
-  
-  for (j in 1:N){
 
-    yhat[j] = lwr + ((upr - lwr) / (1 + exp(-slope * (dose[j] - ed50))));
+  for (j in 1:N){
+    
+    if(dose[j] == 0){
+      yhat[j] = lwr ;
+    } else {
+      
+      real numer = upr - lwr;
+      real denom = 1 + exp(slope * (log(dose[j]) - log(ed50)));
+      yhat[j] = lwr + (numer / denom);
+    }
 
   }
 }
@@ -72,3 +79,4 @@ model {
     target += binomial_lpmf(y[j] | trials[j], yhat[j]);
   }
 }
+
