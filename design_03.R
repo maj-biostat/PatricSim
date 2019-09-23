@@ -5,11 +5,11 @@
 
 # https://www.researchgate.net/post/dose_response_curves_is_better_to_create_different_models_or_just_one
 # DRC: make sure you are using the right function, as the drc
-# can provide a number of sigmoidal fits, ie. Weibull, logistic, loglogistic.
+# can provide a number of drc_logistical fits, ie. Weibull, logistic, drc_logistic.
 
 # The next step is to describe your data in the most parsimonious way -  this
 # means that you are required to do a model reduction. In your example you have
-# shown a five parameter loglogistic function, which will have to be compared
+# shown a five parameter drc_logistic function, which will have to be compared
 # with a four, a three and perhaps also a two parameter model.
 
 # When reducing your model, various parameters become 0. In the instance of your
@@ -50,21 +50,32 @@ tg_env <- new.env()
 tg_env$model_code <- rstan::stan_model(file = "logistic_03.stan", auto_write = TRUE)
 
 
+print_tg_env <- function(){
+  list(trtgrps = tg_env$trtgrps, 
+       lwr = tg_env$lwr,
+       upr = tg_env$upr,
+       ed50 = tg_env$ed50,
+       slope = tg_env$slope
+       
+  )
+}
 
-sigmoid <- function(dose = 1, ed50 = 5, slope = 1, lwr = 0.2, upr = 0.7){
- 
+
+# f(dose) = C + [(D-C) / (1 + exp(B * (dose - I)))]
+drc_logistic <- function(dose = 1, ed50 = 5, slope = 1, lwr = 0.2, upr = 0.7){
   numer = upr - lwr
   denom = 1 + exp(-slope * (dose - ed50))
-  
-  res = lwr + numer / denom;
-  
+  res = lwr + (numer / denom);
   res
 }
 
-# dose = c(0, 2, 3, 5,7)
-# plot(dose, sigmoid(dose, ed50 = 4, 1.1, 0.2, 0.8), ylim = c(0, 1))
-# idx = 1; dose = c(0, 3, 5); ed50 = 5; slope = 1; lwr = 0.2; upr = 0.8
-# sigmoid(dose, ed50, slope, lwr, upr)
+
+# dose = (c(0, 2, 3, 5, 7))
+# plot(dose, drc_logistic(dose, ed50 = 4, slope = 2.8, lwr = 0.2, upr = 0.8), ylim = c(0, 1))
+# plot(dose, drc_logistic(dose, ed50 = 4, slope = 1.3, lwr = 0.2, upr = 0.8), ylim = c(0, 1))
+# plot(c(0, 2, 3, 5, 7), drc_logistic(c(0, 2, 3, 5, 7), ed50 = 8, slope = 1.3, lwr = 0.2, upr = 0.4), ylim = c(0, 1))
+# idx = 1; dose = (c(0, 3, 5)); ed50 = (5); slope = 1; lwr = 0.2; upr = 0.8
+# drc_logistic(dose, ed50, slope, lwr, upr)
 
 scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), ed50 = 5, 
                      slope = 1, lwr = 0.2, upr = 0.8){
@@ -77,96 +88,21 @@ scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), ed50 = 5,
   
   tg_env$trtgrps <- tibble(
     prob_best = rep(1/length(dose), length(dose)),
-    true_mu = sigmoid(dose, ed50, slope, lwr, upr),
+    true_mu = drc_logistic(dose, ed50, slope, lwr, upr),
     prop_rescue = rep(0, length(dose)),
     dose = dose,
     dose_idx = 1:length(dose),
     dose_lab = factor(paste0("D", dose))
   )
 
-  # if(idx == 1){
-  #   # all same - high prob of recovery -
-  #   # 0.9 will give you estimation issues, e.g. all values in dose set to 1
-  #   tg_env$trtgrps$true_mean = rep(0.8, length(dose))
-  # } else if(idx == 2) {
-  #   # all same - med prob of recovery
-  #   tg_env$trtgrps$true_mean = rep(0.7, length(dose))
-  # } else if(idx == 3) {
-  #   # all same - low prob of recovery
-  #   tg_env$trtgrps$true_mean = rep(0.6, length(dose))
-  # } else if(idx == 4){
-  #   tg_env$trtgrps$true_mean = rep(0.5, length(dose))
-  # }else if(idx == 5){
-  #   
-  #   # assume antibiotics are no better than placebo
-  #   # assume 50% have day 7 recovery regardless of the treatment regime
-  #   
-  #   # participants that jump to rescue are considered a failure
-  # 
-  #   # there will be lower proportion of people recovered at day 3 
-  #   # than day 5 so conclude that there would be more people 
-  #   # jumping to rescue in the 3 day regimes compared to the day 5 
-  #   # regimes
-  #   
-  #   # set 30% of 5 day regime to failure (150)
-  #   # set 40% of 3 day regime to failure (200)
-  #   
-  #   tg_env$trtgrps$true_mean = rep(0.5, length(dose))
-  #   tg_env$trtgrps$prop_rescue = c(0.3, 0.4, 0.3, 0.4)
-  #   
-  #   
-  # } else if(idx == 6) {
-  #   
-  #   # assume antibiotics do work better than placebo
-  #   # but there is no duration effect 
-  #   # of those on antibiotics, 70% recover by day 7
-  #   # of those on placebo, 50% recover by daty 7
-  #   
-  #   # anyone that jumps to rescue is considered a failure
-  # 
-  #   # there will be lower proportion of people recovered at day 3 
-  #   # than day 5 so conclude that there would be more people 
-  #   # jumping to rescue in the 3 day regimes compared to the day 5 
-  #   # regimes
-  #   
-  #   tg_env$trtgrps$true_mean = c(0.7, 0.7, 0.5, 0.5)
-  #   tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
-  #   
-  #   
-  # }
-  # else if(idx == 7) {
-  # 
-  #   # assume antibiotics do work better than placebo
-  #   # and there is a duration effect of those on antibiotics
-  #   # Let 70% recover by day 7 if they are on the 5 day regime and
-  #   # 60% recover by day 7 if they are on the 3 day regime.
-  #   
-  #   # For those on placebo assume a 50% recovery by day 7
-  #   
-  #   # there will be lower proportion of people recovered at day 3 
-  #   # than day 5 so conclude that there would be more people 
-  #   # jumping to rescue in the 3 day regimes compared to the day 5 
-  #   # regimes
-  #   
-  #   tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.5)
-  #   tg_env$trtgrps$prop_rescue = c(0, 0, 0.3, 0.4)
-  # } 
   
-  # else if(idx == 7) {
-  #   # 5 days active better than 3. 
-  #   # placebo 3 days reaches for rescue earlier than p5 and therefore
-  #   # gets higher proportion recovered.
-  #   tg_env$trtgrps$true_mean = c(0.7, 0.6, 0.5, 0.6)
-  # } 
 }
 
 
 
 generate_trial_data <- function(n_per_arm = 100) {
   
-  # n_per_arm = 100; idx = 1; dose = c(0, 2, 3, 5,7); ed50 = 5; slope = 1; lwr = 0.2; upr = 0.8
-  # scenario(idx, dose, ed50, slope, lwr, upr)
-
+  
   n <- nrow(tg_env$trtgrps)*n_per_arm
   dat <- tibble(
     id = 1:n
@@ -209,11 +145,15 @@ p_best <- function(mat) {
 
 fit_stan <- function(){
   
+  # n_per_arm = 100; idx = 1; dose = c(0, 2, 3, 5,7); ed50 = 5; slope = 1; lwr = 0.2; upr = 0.8
+  # scenario(idx, dose, ed50, slope, lwr, upr)
   
-  # tg_env$df <- generate_trial_data()
+  print_tg_env()
   
-  #
+  # tg_env$df <- generate_trial_data(n_per_arm = 200)
   # gmodels::CrossTable(tg_env$df$y, tg_env$df$dose)
+  # tg_env$model_code <- rstan::stan_model(file = "logistic_03.stan", auto_write = TRUE)
+  
   
   # participant data
   tmp <- tg_env$df %>%
@@ -222,24 +162,48 @@ fit_stan <- function(){
                      trials = n()) %>%
     dplyr::ungroup() 
   
-  model_data <- list(y = tmp$y / tmp$trials,
+  model_data <- list(y = tmp$y ,
                      trials = tmp$trials,
-                     dose = tmp %>% dplyr::pull(dose),
+                     dose = tmp %>%  dplyr::pull(dose),
                      N = nrow(tmp))
+  
+  
+  # brms::make_stancode(y|trials(trials) ~ dose, data = tmp, family = binomial())
+  # grp_means = c(0.2, 0.3, 0.8, 0.4)
+  # dt <- tibble(
+  #   id = 1:100,
+  #   grp = sample(1:4, 100, replace = T)
+  # )
+  # dt$y <- rnorm(100, mean = grp_means[dt$grp], sd = 1)
+  # 
+  # brms::make_standata(y ~ 1 + (1|grp), data = dt)
+  # brms::make_stancode(y ~ 1 + (1|grp), data = dt)
+  
+  # model_data <- list(y = tmp$y / tmp$trials,
+  #                    trials = tmp$trials,
+  #                    dose = tmp %>% dplyr::mutate(dose = exp(dose)) %>% dplyr::pull(dose),
+  #                    N = nrow(tmp))
   
   model_fit <- rstan::sampling(tg_env$model_code, 
                                data = model_data,
                                chains = 1, 
                                iter = 10000,
                                refresh = 10000,
-                               seed = interim_seed,
-                               control = list(adapt_delta = 0.999),
+                               seed = ifelse(!exists("interim_seed"), 1, interim_seed),
+                               control = list(adapt_delta = 0.99),
                                verbose = T)
+  
+  print_tg_env()
+  print(model_fit, digits = 3)
+  
+  pairs(model_fit, pars = c("slope", "ed50", "lwr", "upr"))
+  pairs(model_fit, pars = "yhat")
+  
   
   # what to compare???
   # model_fit <- rstan::sampling(tg_env$model_code, data = model_data,chains = 1, iter = 1,refresh = 1,seed = interim_seed,control = list(adapt_delta = 0.999),verbose = F)
   
-  # print(model_fit)
+  # print(model_fit, digits = 3)
   
   # log odds of being better by day 7
   model_draws <- as.matrix(model_fit, pars = c("b0", "b"))

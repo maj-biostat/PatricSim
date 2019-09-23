@@ -28,12 +28,13 @@ functions {
 data {
   // sample size
   int<lower=0> N;
-  real dose[N];
-  real<lower=0,upper=1> y[N];
-  real<lower=0> trials[N];
+  real<lower=0> dose[N];
+  int<lower=0> y[N];
+  int<lower=0> trials[N];
 }
 
 parameters {
+  
   real slope;
   real<lower=0> ed50;
   real<lower=0,upper=1> lwr;
@@ -42,18 +43,12 @@ parameters {
 
 transformed parameters {
 
-  real yhat[N];
-  real numer;
-  real denom;
+  real<lower=0,upper=1> yhat[N];
   
-  numer = upr - lwr;
-  // print("        numer   : ",  numer);
-
   for (j in 1:N){
-    denom = 1 + exp(-slope * (dose[j] - ed50));
-    yhat[j] = lwr + (numer / denom);
-    // print("        denom   : ",  denom);
-    // print("        yhat[j] : ",  yhat[j]);
+
+    yhat[j] = lwr + ((upr - lwr) / (1 + exp(-slope * (dose[j] - ed50))));
+
   }
 }
 
@@ -63,15 +58,17 @@ model {
   // the mean mu and the sample size v. Wikipedia says that this can be done 
   // by setting alpha=mu*v and beta=(1-mu)*v. 
 
-  target += normal_lpdf(slope | 1, 10);
-  target += normal_lpdf(ed50 | 5, 10);
+  target += normal_lpdf(slope | 0, 10);
   
+  // ed50 has lower bound of 0 therefore the next is half-normal 
+  target += normal_lpdf(ed50 | 0, 10);
+
   target += uniform_lpdf(lwr | 0, 1);
   target += uniform_lpdf(upr | 0, 1);
 
   for (j in 1:N){
-    
-    target += beta_lpdf(y[j] | yhat[j]*trials[j], (1-yhat[j])*trials[j]);
 
+    // target += beta_lpdf(y[j] | yhat[j]*trials[j], (1-yhat[j])*trials[j]);
+    target += binomial_lpmf(y[j] | trials[j], yhat[j]);
   }
 }
