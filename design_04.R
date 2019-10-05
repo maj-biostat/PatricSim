@@ -3,32 +3,6 @@
 ##
 # In this design we have x parallel groups
 
-# https://www.researchgate.net/post/dose_response_curves_is_better_to_create_different_models_or_just_one
-# DRC: make sure you are using the right function, as the drc
-# can provide a number of drc_loglogistical fits, ie. Weibull, logistic, drc_loglogistic.
-
-# The next step is to describe your data in the most parsimonious way -  this
-# means that you are required to do a model reduction. In your example you have
-# shown a five parameter drc_loglogistic function, which will have to be compared
-# with a four, a three and perhaps also a two parameter model.
-
-# When reducing your model, various parameters become 0. In the instance of your
-# four parameter model, you have the upper limit (=d), lower limit (=c), slope
-# (=b), and the inception point (=e, this parameter also is known as the ED50 or
-# median point in the curve decay). The three parameter model assumes that your
-# lower limit c is equal to 0, and the two parameter model you will only
-# quantify the slope and the inception point (this is probably too simple).
-
-# The first step is to compare the various parameter functions using the
-# mselect() function (e.g. mselect(m1, list(LL.5(), LL.4(), LL.3(), LL.2()),
-# linreg=TRUE, icfct=AIC). This will help you reduce the model to the
-# appropriate parameter function, and in the example I have given you, based on
-# the AIC, loglikelihood and lack of fit. Also note that the linreg =TRUE means
-# that the curves are also compared against linear functions. The function will
-# rank your curves based on the best fit. Caution here, as this is user defined,
-# so you need to check that you are using a biologically appropriate function.
-# You can also use mselect() to compare between different families if you need
-# to.
 
 library(configr)
 library(optparse)
@@ -47,14 +21,13 @@ Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
 source("setup.R")
 
 tg_env <- new.env()
-tg_env$model_code <- rstan::stan_model(file = "logistic_03.stan", auto_write = TRUE)
+tg_env$model_code <- rstan::stan_model(file = "logistic_04.stan", auto_write = TRUE)
 
-
+# tg_env$model_code <- rstan::stan_model(file = "logistic_04b.stan", auto_write = TRUE)
 print_tg_env <- function(){
   list(trtgrps = tg_env$trtgrps, 
        lwr = tg_env$lwr,
        upr = tg_env$upr,
-       ed50 = tg_env$ed50,
        slope = tg_env$slope
        
   )
@@ -65,44 +38,81 @@ plot_tg_env_drc <- function(){
   plot(tg_env$trtgrps$dose, tg_env$trtgrps$true_mu, ylim = c(0, 1))
 }
 
+estBetaParams <- function(mu, sd) {
+  var = sd^2
+  
+  if(mu < 0.00001 | mu > 0.99999) return(NA)
+  if(var < 0.00001 | var > 0.24999) return(NA)
+  
+  alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
+  beta <- alpha * (1 / mu - 1)
+  return(params = list(alpha = alpha, beta = beta))
+}
 
 
-# f(dose) = C + [(D-C) / (1 + exp(B * (dose - I)))]
-drc_loglogistic <- function(dose = 1, ed50 = 4, slope = 4, lwr = 0.2, upr = 0.7){
+
+
+drc_loglogistic <- function(dose = 1, slope = 0, lwr = 0.4, upr = 0.6, ed50 = 5){
   numer = upr - lwr
   
+  # when dose is 0, log(dose is -Inf) and 0 times -Inf is NaN so 
+  # need to replace with sensible value
+  # if slope is zero, denom will be 2
   denom = 1 + exp(slope * (log(dose) - log(ed50)))
   if(slope == 0 & any(is.nan(denom))){
     denom[is.nan(denom)] <- 2
   }
   
+  # if slope is zero, response will be mid way between lwr and upr
   res = lwr + (numer / denom)
   as.numeric(res)
 }
 
 
-# dose = 0:10; ed50 = 3.5; slope = 0; lwr = 0.2;  upr = 0.8
-# drc_loglogistic(dose, ed50, slope, lwr, upr)
-# plot(dose, drc_loglogistic(dose, ed50, slope, lwr, upr), ylim = c(0, 1))
 
-scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), ed50 = 5, 
-                     slope = 1, lwr = 0.2, upr = 0.8){
-  
-  
-  tg_env$ed50 <- ed50
+# library(drc)
+# dose = 0:10; slope = 0; lwr = 0.4;  upr = 0.6
+# drc_loglogistic(dose, slope, lwr, upr)
+# resp <- drc_loglogistic(dose, slope, lwr, upr)
+# m <- drm(resp ~ dose, fct = LL.4())
+# summary(m)
+# plot(dose, drc_loglogistic(dose, slope, lwr, upr), ylim = c(0, 1))
+
+scenario <- function(idx = 1, dose = c(0, 2, 3, 5, 7), 
+                     slope = 1, lwr = 0.2, upr = 0.8, ed50 = 5){
+
   tg_env$slope <- slope
   tg_env$lwr <- lwr
   tg_env$upr <- upr
   
   tg_env$trtgrps <- tibble(
     prob_best = rep(1/length(dose), length(dose)),
-    true_mu = drc_loglogistic(dose, ed50, slope, lwr, upr),
+    true_mu = drc_loglogistic(dose, slope, lwr, upr),
     prop_rescue = rep(0, length(dose)),
     dose = dose,
     dose_idx = 1:length(dose),
     dose_lab = factor(paste0("D", dose))
   )
 
+  
+}
+
+scenario2 <- function(idx = 1, dose = c(0, 2, 3, 5, 7), 
+                      location = 4, scale = 2){
+  
+  tg_env$slope <- slope
+  tg_env$lwr <- lwr
+  tg_env$upr <- upr
+  
+  tg_env$trtgrps <- tibble(
+    prob_best = rep(1/length(dose), length(dose)),
+    true_mu = plogis(dose, location, scale),
+    prop_rescue = rep(0, length(dose)),
+    dose = dose,
+    dose_idx = 1:length(dose),
+    dose_lab = factor(paste0("D", dose))
+  )
+  
   
 }
 
@@ -153,17 +163,26 @@ p_best <- function(mat) {
 
 fit_stan <- function(){
   
-  # idx = 1; dose = c(0, 2, 3, 5, 7); ed50 = 4; slope = -1; lwr = 0.7; upr = 0.8; scenario(idx, dose, ed50, slope, lwr, upr)
+  # idx = 1; dose = c(1, 2, 3, 5, 7, 10); slope = -3; lwr = 0.4; upr = 0.8; ed50 = 5; scenario(idx, dose, slope, lwr, upr)
 
   
   print_tg_env()
   
   plot_tg_env_drc()
   
+  # redo <- function(s){ 
+  #   idx = 1; dose = c(1, 2, 3, 5, 7, 10); slope = s; lwr = 0.4; upr = 0.8; ed50 = 5; scenario(idx, dose, slope, lwr, upr)
+  #   
+  #   message(print_tg_env())
+  #   
+  #   print(plot_tg_env_drc())
+  # }
+  # 
+  # redo(-4)
+  # 
   # tg_env$df <- generate_trial_data(n_per_arm = 100)
   # gmodels::CrossTable(tg_env$df$y, tg_env$df$dose)
-  # tg_env$model_code <- rstan::stan_model(file = "logistic_03.stan", auto_write = TRUE)
-  # tg_env$model_code <- rstan::stan_model(file = "logistic_03b.stan", auto_write = TRUE)
+  # tg_env$model_code <- rstan::stan_model(file = "logistic_04b.stan", auto_write = TRUE)
   
   
   # participant data
@@ -175,12 +194,11 @@ fit_stan <- function(){
                      prop = y/trials) %>%
     dplyr::ungroup() 
   
-  model_data <- list(y = tmp$y ,
-                     trials = tmp$trials,
-                     dose = tmp %>%  dplyr::pull(dose),
-                     N = nrow(tmp))
-  
-  
+  model_data <- list(D = length(tmp$dose),
+                     n = tmp$trials,
+                     y = tmp$y,
+                     tau0 = 2.5)
+
   # brms::make_stancode(y|trials(trials) ~ dose, data = tmp, family = binomial())
   # grp_means = c(0.2, 0.3, 0.8, 0.4)
   # dt <- tibble(
@@ -205,21 +223,31 @@ fit_stan <- function(){
                                control = list(adapt_delta = 0.99),
                                verbose = T)
   
+  # library(shinystan)
+  # shinystan::launch_shinystan(model_fit)
   # print(model_fit, digits = 3)
   # print_tg_env()
-  # plot(model_fit, plotfun = "stan_trace")
-  # pairs(model_fit, pars = c("slope", "ed50", "lwr", "upr"))
+  # plot(model_fit, plotfun = "stan_trace", pars = "eta")
+  # pairs(model_fit, pars = c("eta"))
   # pairs(model_fit, pars = "yhat")
-  # print(model_fit, digits = 3)
   
   # log odds of being better by day 7
-  model_draws <- as.matrix(model_fit, pars = c("ed50", "slope", "lwr", "upr"))
-  head(model_draws)
+  # model_draws <- as.matrix(model_fit, pars = c("eta_star"))
+  # lapply(1:5, function(x) var(model_draws[,x]))
+  # plot_draws <- function(x){
+  #   lines(density(model_draws[,x]), col = x + 2)
+  # }
+  # plot(density(model_draws[,2]), xlim = c(-1.5, 1.5), ylim = c(0, 6))
+  # lapply(3:5, plot_draws)
+  # model_draws <- as.matrix(model_fit, pars = c("eta"))
+  # head(model_draws)
+  # plot(density(model_draws[,1]), xlim = c(0, 2.5), ylim = c(0, 5))
+  # lapply(2:5, plot_draws)
   
-  
-  
-  
-  
+  plot(tmp$dose, tmp$y/tmp$trials, ylim = c(0,1))
+  lines(tmp$dose, apply(plogis(model_draws), 2, mean), col = "red")
+  lines(tmp$dose, apply(plogis(model_draws), 2, quantile, 0.1), col = "red", lty = 2)
+  lines(tmp$dose, apply(plogis(model_draws), 2, quantile, 0.9), col = "red", lty = 2)
 
 }
 
@@ -234,7 +262,7 @@ some_plots <- function(){
   resp_est <- function(dose){
     
     resp_var <- function(x){
-      drc_loglogistic(dose, model_draws[x, "ed50"],
+      drc_loglogistic(dose, 
                       model_draws[x, "slope"],
                       model_draws[x, "lwr"],
                       model_draws[x, "upr"])
@@ -266,6 +294,40 @@ some_plots <- function(){
     geom_point(data = dfig2, aes(y = mu), col = "red")
 }
 
+
+
+precision <- function(){
+  
+  # 
+  nsim <- 1000
+  
+  # assume a uniform prior
+  a <- 1
+  b <- 1
+  
+  # true recovery 80%
+  p <- 0.8
+  n <- 100
+  
+  m <- array(0, dim = c(nsim, 2))
+  
+  for(i in 1:nsim){
+    evt <- rbinom(1, n, p)
+    
+    y <- rbeta(1000, a + evt, b + n - evt)
+    
+    m[i, ] <- quantile(y, probs = c(0.025, 0.975))
+  }
+  
+  
+  ci_est <- colMeans(m)
+  ci_est
+  diff(ci_est)
+
+}
+
+
+
 simulate_trial <- function(id_trial = 1){
   
   # id_trial = 1
@@ -278,7 +340,7 @@ simulate_trial <- function(id_trial = 1){
   message(paste0("###########################################"))
   
   # scenario(cfg$scenarioid)
-  scenario(cfg$scenarioid, dose = c(0, 2, 3, 5,7), ed50 = 5, 
+  scenario(cfg$scenarioid, dose = c(0, 2, 3, 5,7), 
            slope = 1, lwr = 0.2, upr = 0.8)
 
   # reset data
