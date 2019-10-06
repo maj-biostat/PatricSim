@@ -348,7 +348,7 @@ fit_stan_2 <- function(){
   
   # library(shinystan)
   # shinystan::launch_shinystan(model_fit)
-  # print(model_fit, digits = 3)
+  print(model_fit, digits = 3)
   # print_tg_env()
   # plot(model_fit, plotfun = "stan_trace", pars = "eta")
   # pairs(model_fit, pars = c("theta_1"))
@@ -357,6 +357,7 @@ fit_stan_2 <- function(){
   prop_recov <- plogis(as.matrix(model_fit, pars = c("theta")))
 
   prob_recov_mu <- colMeans(prop_recov)
+  prob_recov_mu
   
   bias_mu <- prob_recov_mu - tg_env$trtgrps$true_mu
   
@@ -367,16 +368,18 @@ fit_stan_2 <- function(){
   # superiority 
   # NOTE!! ordered as p_11 - p1, p11 - p2, p_11 - p_3 etc
   prob_sup <- colMeans(prop_recov_diffs > 0)
+  prob_sup
   # decis_sup <- colMeans(prop_recov_diffs > 0) > tg_env$p_sup_deicsion_thresh
   
   # NOTE!! ordered as p_1 ni p11, p_2 ni p11, p_3 ni p11, 
   prob_ni <- colMeans(prop_recov_diffs > -cfg$p_ni_thresh & 
                         prop_recov_diffs < cfg$p_ni_thresh)
-  
+  prob_ni
   # decis_ni <- colMeans(prop_recov_diffs > -tg_env$p_ni_thresh & 
   #            prop_recov_diffs < tg_env$p_ni_thresh) > tg_env$p_ni_deicsion_thresh
   
   dres <- rbind(prob_sup, prob_ni)
+  dres
   
   # plot(tg_env$trtgrps$dose, tmp$prop, ylim = c(0,1))
   # lines(tg_env$trtgrps$dose, tg_env$trtgrps$true_mu)
