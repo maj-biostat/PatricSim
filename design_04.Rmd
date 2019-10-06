@@ -1,0 +1,181 @@
+---
+title: "PATRIC Design 4"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+ggplot2::theme_set(ggplot2::theme_bw())
+ggplot2::theme_update(text = element_text(size = 10))
+ggplot2::theme_update(legend.position = "top")
+# ggplot2::theme_update(legend.title = element_blank())
+ggplot2::theme_update(axis.text.x = element_text(size = 10))
+ggplot2::theme_update(axis.text.y = element_text(size = 10))
+
+
+estBetaParams <- function(mu, sd) {
+  var = sd^2
+  
+  if(mu < 0.00001 | mu > 0.99999) return(NA)
+  if(var < 0.00001 | var > 0.24999) return(NA)
+  
+  alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
+  beta <- alpha * (1 / mu - 1)
+  return(params = list(alpha = alpha, beta = beta))
+}
+
+l1 <- estBetaParams(0.8, 0.05)
+l2 <- estBetaParams(0.75, 0.05)
+
+y1 <- rbeta(1000, l1$alpha, l1$beta)
+y2 <- rbeta(1000, l2$alpha, l2$beta)
+
+d1 <- density(y1)
+d2 <- density(y2)
+
+d3 <- density(y1-y2)
+
+ymax <- max(c(d1$y, d2$y))
+xlim <- range(d1$x, d2$x)
+
+plot(d3)
+
+plot(d1)
+
+
+
+
+drc_true_mu <- function(x){
+  
+  # p_rec <- p_range * pnorm(dose, location, scale) + p_lwr
+  
+  
+  p_rec <- pgrid$p_range[x] * pnorm(dose, 
+                                    pgrid$location[x], 
+                                    pgrid$scale[x]) + pgrid$p_lwr[x]
+
+  return(p_rec)
+  
+}
+
+```
+
+# Design 4
+
+Looking at association between dose (duration of antibiotic treatment) and response (recovery by 7 days).
+Time to recovery is another option for the endpoint.
+
+Previously, multi-bottle stratergy proposed examining non-inferiority between SOC and comparator durations.
+Durations and NI thresholds would, to all intents and purposes, be selected arbitrarily.
+Pichichero (2010) provides commentary on durations - 10 days is not unusual globally so we should include to improve generalisability.
+
+*Contention*   
+
+*Plausible is a scenario whereby a 7 day duration is superior to a 3 day duration, but equivalent to a 4 day duration.*
+*If our selected durations are $a$ and $b$ with $a < b$, we have no information regarding the profile of the duration-response curve over $(a, b)$ and therefore no ability to compare any of $a + \Delta$ versus $b$ for $\Delta < b - a$.*
+
+Pouwels (2019) strongly suggests duration-response evaluation as a way to optimise antibiotic duration.
+Approaches have been suggested in the literature to assess treatment duration including adaptive designs, e.g. RAR, play-the-winner, drop-the-loser.
+Quartagno et al (2018) suggests a fixed design with a focus on gaining information to model the duration-response relationship over a pre-specified range. 
+They evaluate sensitivity to key design parameters, including sample size, number and position of arms, ultimately recommending approx. 500 patients to 5 to 7 arms.
+
+## Proposed Design
+
+No blinding. 
+No rescue. 
+Let $T_d$ be a treatment duration in days with $d \in {0, 1, \dots, 10}$ and $\pi_d$ be the proportion recovered by day 7 under treatment $T_d$.
+Let $\delta_{ji} = \pi_j - \pi_i$ with $j > i$ and let $\gamma$ be some fixed non-inferiority threshold, e.g. 5%.
+Treatments are randomised (with fixed allocation).
+No arm-dropping in this design, although it could be used to increase efficiency.
+Examine:
+
++ superiority: $Pr(\pi_j > \pi_i) > \zeta_s$   for $j = max(d)$ and $j > i$
++ NI: $Pr(\delta_{ji} < \gamma) > \zeta_n$ for $j = max(d)$ and $j > i$
+
+Test both against some calibrated probability threshold, e.g. $\zeta_i = 0.9$.
+
+In English, test (1) probability that recovery in the maximum dose is higher than all others, (2) probability mass of the difference is within some non-inferiority threshold e.g. 5%, 10%.
+Tests could be extended to all pairwise differences.
+
+Issues/comments:
+
+1. No blinding - in practice, seems like blinding might complicate statistics and challenge logistics to little quantifiable gain.
+2. Fixed allocation - in RAR, interim results may influence clinicians and lead to selection bias.
+3. Assuming monotone functions for dose might be reasonable.
+
+Questions:
+
+1. Is relapse at day $x$ a worthwhile/relevant consideration?
+2. Are there known host by pathogen interactions, e.g. patient characteristics that lead to variations in optimal duration?
+3. Consider background changes in the population response to antibiotics?
+4. Model non-compliance - here non-compliance can result in non-conservative distortion of conclusions. Hernan (2017) talks about this. Argument is that this is pragmatic study.
+
+## Data Generation
+
+Figure 1 shows a number of possible dose profiles.
+Each scenario comprises 11 distinct treatment durations $T_d$ with $d \in \{0, 1, \dots, 10\}$.
+
+```{r, echo = F, fig.width=5.5, fig.height=5.5, fig.cap="Some data generation scenarios"}
+
+dose <- 0:10
+
+pgrid <- expand.grid(location = c(3, 5, 7),
+                     scale = c(0.2, 1.2, 3),
+                     p_range = c(0, 0.1, 0.3),
+                     p_lwr = 0.5)
+pgrid$id <- as.character(paste0("V", rep(1:nrow(pgrid))))
+
+
+m <- do.call(rbind, lapply(1:nrow(pgrid), drc_true_mu))
+dfig <- as.data.frame(t(m)) %>%
+  tidyr::gather("id", "mu") %>%
+  dplyr::mutate(dose = rep(dose, len = length(dose)*nrow(pgrid)))
+
+dfig <- merge(dfig, pgrid, by = "id")
+
+ggplot(dfig, aes(dose, mu, group = id))+
+  geom_line() +
+  geom_point(size=0.4) +
+  scale_y_continuous("Pr(recov)", lim = 0:1) +
+  scale_x_continuous("Days", breaks = c(0, 2, 4, 6, 8, 10)) +
+  facet_grid(paste0("Mean ", location) ~ paste0("Pr. range ", p_range ))
+```
+
+\newpage
+
+
+
+# Dynamic state space model
+
+Berry (2010) and Pouwels (2019) refer to a dynamic linear model, a form of state space model, for dose-response. We take an analogous approach as a modelling strategy. We estimate the log-odds of the first dose independently and then the cumulative differences under a random walk. The model reflects some underlying state that varies according to a random walk, which we observe with noise. In notation, let $\eta_j$ denote the log-odds at dose $d \in D_j$, $j = 1, 2, \dots, J$. We formulate a model which locally fits a level for the proportion recovered at each dose. If we let $y_{j}$ be the number of events occurring at dose $j$, we have:
+
+\begin{align*}
+y_{j} &\sim \text{Bin}(n_j, \text{logit}^{-1}(\eta_j))   \\ 
+\tau_0 &\sim \text{Student\_t}_+(3, 0, 2.5)     \\  
+\tau &\sim \text{Student\_t}_+(3, 0, 2.5)     \\ 
+\eta^*_{[1]} &\sim N(0, \tau_0)   \\ 
+\eta^*_{[2:J]} &\sim N(0, \tau)   \\ 
+\eta_j &= \eta^*_{[1]} + \sum_{j=2}^J \eta^*_{j}
+\end{align*}
+
+The model amounts to estimating a reference chance of recovery on the logit scale and then the deviations from that reference as a random walk.
+The attraction is that it does not enforce arbitrary parameteric assumptions about the shape of the dose response curve.
+To allow for non-unit increments in the dosage, simply scale the variance of the state model by the difference between successive doses.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

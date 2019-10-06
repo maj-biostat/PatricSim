@@ -48,12 +48,20 @@ get_cfg <- function(cfgfile = "cfg.yaml"){
   }
 
   
-  l$noninf_threshold <- tt$noninf_threshold
-  l$equiv_threshold <- tt$equiv_threshold
-  l$decision_ni_prob <- tt$decision_ni_prob
-  l$decision_eq_prob <- tt$decision_eq_prob
+  if("dose" %in% names(opt)){
+    l$dose <- 0
+  } else {
+    
+    l$dose <- tt$dose
+    
+  }
   
-
+  
+  l$n_per_trt <- tt$n_per_trt
+  l$p_ni_thresh <- tt$p_ni_thresh
+  l$p_ni_deicsion_thresh <- tt$p_ni_deicsion_thresh
+  l$p_sup_deicsion_thresh <- tt$p_sup_deicsion_thresh
+  
   l
 }
 
