@@ -381,7 +381,7 @@ difftime(endtime, starttime, units = "hours")
 w <- warnings()
 
 rdsfilename <- file.path("out",
-                         paste0("design-02-scenario-", cfg$scenarioid, "-",
+                         paste0("design-04-scenario-", cfg$scenarioid, "-",
                                 format(Sys.time(), "%Y-%m-%d-%H-%M-%S"), ".RDS"))
 
 saveRDS(list(scenario = cfg$scenarioid,
