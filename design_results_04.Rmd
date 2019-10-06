@@ -29,7 +29,7 @@ ggplot2::theme_update(axis.text.y = element_text(size = 10))
 ```
 
 ```{r, include=FALSE}
-nres <- 2
+nres <- 7
 
 dsup <- data.frame()
 dni <- data.frame()
@@ -40,6 +40,9 @@ for(i in 1:nres){
   l <- readRDS(paste0("out/", fout[i]))
   
   # superiority data
+  
+  dtmp1 <- l$dsup
+  
   # test whether max is superior to all other doses
   dtmp <- cbind(l$dsup, apply(l$dsup[, 1:ncol(l$dsup)], 2, function(x){ x > 0.9}))
   
@@ -55,7 +58,7 @@ for(i in 1:nres){
   names(dsup) <- names(tmp)
   
   # non-inferiority
-  dtmp <- cbind(l$dni, apply(l$dni[, 1:ncol(l$dni)], 2, function(x){ x > 0.9}))
+  dtmp <- cbind(l$dni, apply(l$dni[, 1:ncol(l$dni)], 2, function(x){ x > 0.8}))
   
   tmp <- c(scenario = l$scenario, 
            range = l$trtgrps$p_range,
@@ -82,16 +85,22 @@ rownames(dni) <- NULL
 
 eta columns are the proportion of times that the proportion that recovered on max duration was greater than the proportion recovered on the 1 day, 2 days, 3 days etc.
 
+Range gives the range in underlying true recovery probability with a lower bound of 0.5 in all scenarios. For example, a range equal to 0.3 implies that we generate data from parameter values from 0.5 to 0.8.
+
+using a 0.9 decision threshold
+
 ```{r, echo = F, eval = T}
 digits <- c(0, 1, 0, 
             2, 2, 2, 2, 2, 
             2, 2, 2, 2, 2
             )
 
-kable(dni,
+comparison_names <- paste0("10 vs ", 0:9, " days")
+
+kable(dsup,
       caption = paste0("Table. Simulation Results (", nrow(dsup), " rows)"),
       col.names = c("Scenario", "Range", "n_per_arm", 
-                    paste0("d_max vs ", 0:9)),
+                    comparison_names),
       digits = digits) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 full_width = F, position = "left",
@@ -104,16 +113,20 @@ kable(dni,
 
 eta columns are the proportion of times that the proportion that recovered on max duration was non-inferior to the proportion recovered on the 1 day, 2 days, 3 days etc
 
+using a 0.8 decision threshold
+
 ```{r, echo = F, eval = T}
 digits <- c(0, 1, 0, 
             2, 2, 2, 2, 2, 
             2, 2, 2, 2, 2
             )
 
-kable(dsup,
+comparison_names <- paste0("10 vs ", 0:9, " days")
+
+kable(dni,
       caption = paste0("Table. Simulation Results (", nrow(dsup), " rows)"),
       col.names = c("Scenario", "Range", "n_per_arm", 
-                    paste0("d_max vs ", 0:9)),
+                    comparison_names),
       digits = digits) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
                 full_width = F, position = "left",
