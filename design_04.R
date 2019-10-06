@@ -7,8 +7,6 @@
 library(configr)
 library(optparse)
 library(randomizr)
-library(doParallel)
-library(foreach)
 library(dplyr)
 library(ggplot2)
 library(rstan)
@@ -21,89 +19,8 @@ Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
 source("setup.R")
 
 tg_env <- new.env()
-tg_env$model_code <- rstan::stan_model(file = "logistic_04.stan", auto_write = TRUE)
+tg_env$model_code <- rstan::stan_model(file = "design_04_1.stan", auto_write = TRUE)
 
-
-tmp_keep <- function(){
-  
-  # print_tg_env()
-  # plot_tg_env_drc()
-  
-  # tg_env$df <- generate_trial_data(n_per_arm = 100)
-  # gmodels::CrossTable(tg_env$df$y, tg_env$df$dose)
-  # tg_env$model_code <- rstan::stan_model(file = "logistic_04.stan", auto_write = TRUE)
-  
-  # brms::make_stancode(y|trials(trials) ~ dose, data = tmp, family = binomial())
-  # grp_means = c(0.2, 0.3, 0.8, 0.4)
-  # dt <- tibble(
-  #   id = 1:100,
-  #   grp = sample(1:4, 100, replace = T)
-  # )
-  # dt$y <- rnorm(100, mean = grp_means[dt$grp], sd = 1)
-  # 
-  # brms::make_standata(y ~ 1 + (1|grp), data = dt)
-  # brms::make_stancode(y ~ 1 + (1|grp), data = dt)
-  
-  # model_data <- list(y = tmp$y / tmp$trials,
-  #                    trials = tmp$trials,
-  #                    dose = tmp %>% dplyr::mutate(dose = exp(dose)) %>% dplyr::pull(dose),
-  #                    N = nrow(tmp))
-  
-  
-  
-  # scale <- 0.2
-  # shift <- 0.6
-  # 
-  # dose <- seq(0, 10, len = 100)
-  # 
-  # true_mu <- tanh(dose - max(dose)/2)
-  # plot(dose, true_mu)
-  # true_mu <- scale * true_mu
-  # true_mu <- shift + true_mu
-  # plot(dose, true_mu, ylim = 0:1)
-}
-
-
-some_plots <- function(){
-  par(mfrow = c(2, 2))
-  print(lapply(1:4, function(x) hist(model_draws[, x], main = colnames(model_draws)[x])))
-  par(mfrow = c(1, 1))
-  
-  
-  resp_est <- function(dose){
-    
-    resp_var <- function(x){
-      drc_loglogistic(dose, 
-                      model_draws[x, "slope"],
-                      model_draws[x, "lwr"],
-                      model_draws[x, "upr"])
-    }
-    
-    resp <- unlist(lapply(1:nrow(model_draws), resp_var))
-    
-    # dosex <- rep(dose, length(resp)) 
-    # plot(jitter(dosex, 1.3), resp, xlim = c(-0.5, 0.5))
-    
-    resp
-  }
-  
-  # model_draws_test <- model_draws[sample(1:nrow(model_draws), size = 100), ]
-  dfig <- as.data.frame(t(do.call(rbind, lapply(tg_env$trtgrps$dose, resp_est))))
-  names(dfig) <- as.character(tg_env$trtgrps$dose_lab)
-  dfig1 <- dfig %>%
-    tidyr::gather("dose", "response") %>%
-    dplyr::mutate(x = substr(dose, 2, nchar(dose)))
-  dfig2 <- dfig %>%
-    tidyr::gather("dose", "response") %>%
-    dplyr::group_by(dose) %>%
-    dplyr::summarise(mu = mean(response)) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(x = substr(dose, 2, nchar(dose)))
-  
-  ggplot(dfig1, aes(x = x, y = response))+
-    geom_point() +
-    geom_point(data = dfig2, aes(y = mu), col = "red")
-}
 
 
 
@@ -139,7 +56,6 @@ precision_test <- function(){
 
 
 
-# tg_env$model_code <- rstan::stan_model(file = "logistic_04b.stan", auto_write = TRUE)
 print_tg_env <- function(){
   list(trtgrps = tg_env$trtgrps, 
        location = tg_env$location,
@@ -193,19 +109,8 @@ scenario <- function(idx = 0, dose = 0:10){
     dose_idx = 1:length(dose),
     dose_lab = factor(paste0("D", dose))
   )
-  
-  
-  # tg_env$n_per_trt <- n_per_trt
-  # 
-  # # for equivalence x % of the probability mass of the differences 
-  # # between doses e.g. dose4 - dose1, dose4 - dose2 etc must be within
-  # # +/- tg_env$delta_abs_thresh
-  # tg_env$p_ni_thresh <- p_ni_thresh
-  # tg_env$p_ni_deicsion_thresh <- p_ni_deicsion_thresh
-  # # superiority decision prob
-  # tg_env$p_sup_deicsion_thresh <- p_sup_deicsion_thresh
 
-  
+ 
   if(idx == 1){
     tg_env$location <- 5
     tg_env$scale <- 1.2
@@ -330,8 +235,8 @@ model_test <- function(){
     model_fit <- rstan::sampling(tg_env$model_code, 
                                  data = model_data,
                                  chains = 1, 
-                                 iter = 4000,
-                                 refresh = 4000,
+                                 iter = cfg$mcmc_iter,
+                                 refresh = cfg$mcmc_iter,
                                  control = list(adapt_delta = 0.99),
                                  verbose = T)
     
@@ -377,8 +282,8 @@ fit_stan <- function(){
   model_fit <- rstan::sampling(tg_env$model_code, 
                                data = model_data,
                                chains = 1, 
-                               iter = 4000,
-                               refresh = 4000,
+                               iter = cfg$mcmc_iter,
+                               refresh = cfg$mcmc_iter,
                                control = list(adapt_delta = 0.99),
                                verbose = T)
   
@@ -432,24 +337,7 @@ simulate_trial <- function(id_trial = 1){
   tg_env$df <- generate_trial_data(cfg$n_per_trt)
 
   dres <- fit_stan()
-  
- 
-  # tibble(
-  #   id = id_trial, 
-  #   mean_a_diff = tg_env$mean_a_diff,
-  #   mean_p_diff = tg_env$mean_p_diff,
-  #   mean_diff   = tg_env$mean_diff,
-  #   
-  #   prob_a3_ni_a5 = tg_env$prob_a3_ni_a5,
-  #   prob_p3_ni_p5 = tg_env$prob_p3_ni_p5,
-  #   prob_diff_a_eq_diff_p = tg_env$prob_diff_a_eq_diff_p,
-  #   
-  #   a3_ni_a5 = tg_env$a3_ni_a5,
-  #   p3_ni_p5 = tg_env$p3_ni_p5,
-  #   a_eq_p = tg_env$a_eq_p,
-  #   diff_a_eq_diff_p = tg_env$diff_a_eq_diff_p
-  # )
-  
+
   dres
 
 }

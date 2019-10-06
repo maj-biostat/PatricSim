@@ -9,6 +9,10 @@ get_cmdline_opts <- function(){
     optparse::make_option(c("-n", "--nsims"), 
                           type = "integer", default = NULL,
                           help = "number of simulations", 
+                          metavar = "integer"),
+    optparse::make_option(c("-m", "--mcmc_iter"), 
+                          type = "integer", default = NULL,
+                          help = "chain length", 
                           metavar = "integer")
   )
   
@@ -45,6 +49,12 @@ get_cfg <- function(cfgfile = "cfg.yaml"){
     l$nsims <- opt$nsims
   } else {
     l$nsims <- tt$nsims
+  }
+  
+  if("mcmc_iter" %in% names(opt)){
+    l$mcmc_iter <- opt$mcmc_iter
+  } else {
+    l$mcmc_iter <- tt$mcmc_iter
   }
 
   
