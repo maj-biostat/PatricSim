@@ -86,36 +86,36 @@ They evaluate sensitivity to key design parameters, including sample size, numbe
 No blinding. 
 No rescue. 
 Let $T_d$ be a treatment duration in days with $d \in {0, 1, \dots, 10}$ and $\pi_d$ be the proportion recovered by day 7 under treatment $T_d$.
-Let $\delta_{ji} = \pi_j - \pi_i$ with $j > i$ and let $\gamma$ be some fixed non-inferiority threshold, e.g. 5%.
+Let $\delta_{ji} = \pi_j - \pi_i$ with $j > i$ and let $\gamma$ be some fixed equivalence margin, e.g. 5%.
 Treatments are randomised (with fixed allocation).
 No arm-dropping in this design, although it could be used to increase efficiency.
 Examine:
 
 + superiority: $Pr(\pi_j > \pi_i) > \zeta_s$   for $j = max(d)$ and $j > i$
-+ NI: $Pr(\delta_{ji} < \gamma) > \zeta_n$ for $j = max(d)$ and $j > i$
++ equivalence: $Pr(\delta_{ji} < \gamma) > \zeta_n$ for $j = max(d)$ and $j > i$
 
 Test both against some calibrated probability threshold, e.g. $\zeta_i = 0.9$.
 
-In English, test (1) probability that recovery in the maximum dose is higher than all others, (2) probability mass of the difference is within some non-inferiority threshold e.g. 5%, 10%.
+In English, test (1) probability that recovery in the maximum dose is higher than all others, (2) probability mass of the difference is within some equivalence margin e.g. 5%, 10%.
 Tests could be extended to all pairwise differences.
 
 Issues/comments:
 
 1. No blinding - in practice, seems like blinding might complicate statistics and challenge logistics to little quantifiable gain.
 2. Fixed allocation - in RAR, interim results may influence clinicians and lead to selection bias.
-3. Assuming monotone functions for dose might be reasonable.
+3. Assuming monotone functions for dose could be reasonable, it could be overly restrictive.
 
 Questions:
 
 1. Is relapse at day $x$ a worthwhile/relevant consideration?
 2. Are there known host by pathogen interactions, e.g. patient characteristics that lead to variations in optimal duration?
 3. Consider background changes in the population response to antibiotics?
-4. Model non-compliance - here non-compliance can result in non-conservative distortion of conclusions. Hernan (2017) talks about this. Argument is that this is pragmatic study.
+4. Model non-compliance - here non-compliance can result in non-conservative distortion of conclusions. Hernan (2017) talks about this. Argument is that this is pragmatic study and we are considering the differences in practice, rather than in the idealised.
 
 ## Data Generation
 
-Figure 1 shows a number of possible dose profiles.
-Each scenario comprises 11 distinct treatment durations $T_d$ with $d \in \{0, 1, \dots, 10\}$.
+Figure 1 shows example dose profiles.
+Here, each scenario comprises 11 distinct treatment durations $T_d$ with $d \in \{0, 1, \dots, 10\}$.
 
 ```{r, echo = F, fig.width=5.5, fig.height=5.5, fig.cap="Some data generation scenarios"}
 
@@ -149,7 +149,7 @@ ggplot(dfig, aes(dose, mu, group = id))+
 
 # Dynamic state space model
 
-Berry (2010) and Pouwels (2019) refer to a dynamic linear model, a form of state space model, for dose-response. We take an analogous approach as a modelling strategy. We estimate the log-odds of the first dose independently and then the cumulative differences under a random walk. The model reflects some underlying state that varies according to a random walk, which we observe with noise. In notation, let $\eta_j$ denote the log-odds at dose $d \in D_j$, $j = 1, 2, \dots, J$. We formulate a model which locally fits a level for the proportion recovered at each dose. If we let $y_{j}$ be the number of events occurring at dose $j$, we have:
+Berry (2010) and Pouwels (2019) refer to a dynamic linear model, a form of state space model, for dose-response. We take an analogous approach as a modelling strategy. We estimate the log-odds of the first dose independently and then the cumulative differences under a random walk. The model reflects some underlying state that varies according to a random walk, which we observe with noise. In notation, let $\eta_j$ denote the log-odds at dose $d \in D_j$, $j = 1, 2, \dots, J$. We formulate a model which locally fits a level for the proportion that have recovered under each dose. If we let $y_{j}$ be the number of events occurring at dose $j$, we have:
 
 \begin{align*}
 y_{j} &\sim \text{Bin}(n_j, \text{logit}^{-1}(\eta_j))   \\ 
