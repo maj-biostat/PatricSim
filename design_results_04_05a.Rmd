@@ -40,10 +40,10 @@ dbias <- data.frame()
 
 dtrue_mu <- data.frame()
 
-fout <- list.files("out5")
+fout <- list.files("out05a")
 
 for(i in 1:length(fout)){
-  l <- readRDS(paste0("out5/", fout[i]))
+  l <- readRDS(paste0("out05a/", fout[i]))
   
   # superiority data
 
