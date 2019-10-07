@@ -34,10 +34,15 @@ nres <- 7
 dsup <- data.frame()
 dni <- data.frame()
 
-fout <- list.files("out")
+drecov <- data.frame()
+dbias <- data.frame()
+
+dtrue_mu <- data.frame()
+
+fout <- list.files("out10")
 
 for(i in 1:nres){
-  l <- readRDS(paste0("out/", fout[i]))
+  l <- readRDS(paste0("out10/", fout[i]))
   
   # superiority data
   
@@ -71,6 +76,34 @@ for(i in 1:nres){
   
   names(dni) <- names(tmp)
   
+  
+  # prob recovery
+  tmp <- c(scenario = l$scenario, 
+           range = l$trtgrps$p_range,
+           n_per_trt = l$n_per_trt,
+           colMeans(l$dprob))
+  
+  drecov <- rbind(drecov, tmp)
+  names(drecov) <- names(tmp)
+  
+  
+  tmp <- cbind(scenario = l$scenario,
+    dose = l$trtgrps$trtgrps$dose,
+    true_mu = l$trtgrps$trtgrps$true_mu,
+    range = l$trtgrps$p_range
+  )
+  
+  dtrue_mu <- rbind(dtrue_mu, tmp)
+
+  
+  # bias
+  tmp <- c(scenario = l$scenario, 
+           range = l$trtgrps$p_range,
+           n_per_trt = l$n_per_trt,
+           colMeans(l$dbias))
+  
+  dbias <- rbind(dbias, tmp)
+  names(dbias) <- names(tmp)
 }
 
 rownames(dsup) <- NULL
@@ -80,24 +113,17 @@ rownames(dni) <- NULL
 
 ```
 
-
-## Superiority
-
-eta columns are the proportion of times that the proportion that recovered on max duration was greater than the proportion recovered on the 1 day, 2 days, 3 days etc.
-
-Range gives the range in underlying true recovery probability with a lower bound of 0.5 in all scenarios. For example, a range equal to 0.3 implies that we generate data from parameter values from 0.5 to 0.8.
-
-using a 0.9 decision threshold
+## Recovering Parameters
 
 ```{r, echo = F, eval = T}
 digits <- c(0, 1, 0, 
             2, 2, 2, 2, 2, 
-            2, 2, 2, 2, 2
+            2, 2, 2, 2, 2, 2
             )
 
-comparison_names <- paste0("10 vs ", 0:9, " days")
+comparison_names <- paste0(0:10, " days")
 
-kable(dsup,
+kable(drecov,
       caption = paste0("Table. Simulation Results (", nrow(dsup), " rows)"),
       col.names = c("Scenario", "Range", "n_per_arm", 
                     comparison_names),
@@ -109,21 +135,45 @@ kable(dsup,
 
 ```
 
-## Non-inferiority
+The figure below shows the estimated (black) proportion recovered and true proportion recovered (red).
 
-eta columns are the proportion of times that the proportion that recovered on max duration was non-inferior to the proportion recovered on the 1 day, 2 days, 3 days etc
+```{r, echo = F, fig.width=5.5, fig.height=3.5, fig.cap="Estimated and true probability of recovery", fig.align="center"}
 
-using a 0.8 decision threshold
+
+dfig1 <- drecov %>%
+  dplyr::select(-n_per_trt) %>%
+  tidyr::gather("dose", "precov", -range, -scenario) %>%
+  dplyr::arrange(scenario, dose) %>%
+  dplyr::mutate(dose = gsub("theta\\[", "", dose),
+    dose = gsub("\\]", "", dose), 
+    dose = as.numeric(dose)-1)
+
+
+
+ggplot(dfig1, aes(x = dose, y = precov, group = scenario))+
+  geom_line() +
+  geom_point() +
+  geom_point(data = dtrue_mu, 
+    aes(x = dose, y = true_mu, group = scenario), col = "red") +
+  scale_y_continuous("Pr(recov)", lim = 0:1) +
+  scale_x_continuous("Days", breaks = c(0, 2, 4, 6, 8, 10)) +
+  facet_wrap(.~ paste0("Pr. range ", range ))
+
+# +
+#   facet_grid(paste0("Mean ", location) ~ paste0("Pr. range ", p_range ))
+```
+
+## Bias
 
 ```{r, echo = F, eval = T}
 digits <- c(0, 1, 0, 
             2, 2, 2, 2, 2, 
-            2, 2, 2, 2, 2
+            2, 2, 2, 2, 2, 2
             )
 
-comparison_names <- paste0("10 vs ", 0:9, " days")
+comparison_names <- paste0(0:10, " days")
 
-kable(dni,
+kable(dbias,
       caption = paste0("Table. Simulation Results (", nrow(dsup), " rows)"),
       col.names = c("Scenario", "Range", "n_per_arm", 
                     comparison_names),
@@ -132,6 +182,65 @@ kable(dni,
                 full_width = F, position = "left",
                 font_size = 12,
                 latex_options = "hold_position") 
+
+```
+
+## Superiority
+
+The columns with "10 Days versus x days" show the proportion of times that the probability of recovery on the maximum duration antibiotic was found to be higher than the probability of recovery on the 1 day, 2 days, 3 days etc. In these examples we used a 90% decision threshold, i.e. those with $Pr(\pi_{max(d)} > \pi_i) > 0.9$ where $\pi_k$ is the probability (or proportion) recovered on dose $d$ and $d \in \{0, 1, \dots, 10\}$.
+
+Range gives the range in underlying true recovery probability with a lower bound of 0.5 in all scenarios. For example, a range equal to 0.3 implies that we generate data from parameter values from 0.5 to 0.8.
+
+
+```{r, echo = F, eval = T}
+digits <- c(0, 1, 0, 
+            2, 2, 2, 2, 2, 
+            2, 2, 2, 2, 2
+            )
+
+comparison_names <- paste0(0:9, " days")
+
+kable(dsup,
+      caption = paste0("Table. Simulation Results (", nrow(dsup), " rows)"),
+      col.names = c("", "", "per_arm", 
+                    comparison_names),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position")  %>%
+  add_header_above(c("Scenario" = 1, "Range" = 1, "N" = 1,
+    "10 days versus" = 10))
+
+```
+
+## Equivalence
+
+Analogous to above but here we examine equivalence. Equivalence is determined by setting an equivalence threshold and testing that a large proportion of the probability mass of the difference between proportion recovered is within this equivalence threshold. See design doc for further explanation.
+
+Here we show proportion of times that the probability of recovery on the maximum duration antibiotic was found to be equivalent to the probability of recovery on the 1 day, 2 days, 3 days etc arms.
+
+An 80% decision threshold was used.
+
+```{r, echo = F, eval = T}
+digits <- c(0, 1, 0, 
+            2, 2, 2, 2, 2, 
+            2, 2, 2, 2, 2
+            )
+
+comparison_names <- paste0(0:9, " days")
+
+kable(dni,
+      caption = paste0("Table. Simulation Results (", nrow(dsup), " rows)"),
+      col.names = c("", "", "per_arm", 
+                    comparison_names),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position")  %>%
+  add_header_above(c("Scenario" = 1, "Range" = 1, "N" = 1,
+    "10 days versus" = 10))
 
 ```
 

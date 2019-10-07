@@ -20,7 +20,7 @@ Sys.setenv(LOCAL_CPPFLAGS = '-march=native')
 source("setup.R")
 
 tg_env <- new.env()
-tg_env$model_code <- rstan::stan_model(file = "design_04_2.stan", auto_write = TRUE)
+# tg_env$model_code <- rstan::stan_model(file = "design_04_3.stan", auto_write = TRUE)
 
 
 
@@ -358,8 +358,6 @@ fit_stan_2 <- function(){
   prop_recov <- plogis(as.matrix(model_fit, pars = c("theta")))
 
   prob_recov_mu <- colMeans(prop_recov)
-  prob_recov_mu
-  
   prob_recov_mu_lwr <- apply(prop_recov, 2, quantile, 0.1)
   prob_recov_mu_upr <- apply(prop_recov, 2, quantile, 0.9)
   
@@ -421,7 +419,7 @@ fit_walker_1 <- function(){
   model_fit <- walker_glm(y ~ -1 + 
                             rw1(~ dose, beta_prior = c(0, 10), sigma_prior = c(0, 10)), 
                           data = tmp, u = tmp$trials, distribution = "binomial",
-                          refresh = 0, chains = 1, )
+                          refresh = 0, chains = 1)
   
   # plot_fit(model_fit)
   # print(model_fit$stanfit) 
@@ -435,8 +433,11 @@ fit_walker_1 <- function(){
   
   # log odds of being better by day 7
   prop_recov <- as.matrix(model_fit$stanfit, pars = c("y_fit"))
-  
+
   prob_recov_mu <- colMeans(prop_recov)
+  prob_recov_mu_lwr <- apply(prop_recov, 2, quantile, 0.1)
+  prob_recov_mu_upr <- apply(prop_recov, 2, quantile, 0.9)
+  
   bias_mu <- prob_recov_mu - tg_env$trtgrps$true_mu
   
   # Differences between proportions recovered - 
@@ -468,81 +469,11 @@ fit_walker_1 <- function(){
   
   return(list(dres = dres,
               prob_recov_mu = prob_recov_mu, 
+              prob_recov_mu_lwr = prob_recov_mu_lwr, 
+              prob_recov_mu_upr = prob_recov_mu_upr, 
               bias_mu = bias_mu))
 }
 
-
-
-fit_walker_1 <- function(){
-  
-  # participant data
-  tmp <- tg_env$df %>%
-    dplyr::group_by(dose) %>%
-    dplyr::summarise(y = sum(y),
-                     trials = n(),
-                     prop = y/trials) %>%
-    dplyr::ungroup() 
-  
-  #  plot(tmp$dose, tmp$prop, ylim = 0:1)
-  
-  model_data <- list(D = length(tmp$dose),
-                     duration = tmp$dose,
-                     n = tmp$trials,
-                     y = tmp$y)
-  
-  # tg_env$model_code <- rstan::stan_model(file = "design_04_2.stan", auto_write = TRUE)
-  model_fit <- walker_glm(y ~ -1 + 
-                            rw1(~ dose, beta_prior = c(0, 10), sigma_prior = c(0, 10)), 
-                          data = tmp, u = tmp$trials, distribution = "binomial",
-                          refresh = 0, chains = 1, )
-  
-  # plot_fit(model_fit)
-  # print(model_fit$stanfit) 
-  
-  # library(shinystan)
-  # shinystan::launch_shinystan(model_fit$stanfit)
-  # print(model_fit, digits = 3)
-  # print_tg_env()
-  # plot(model_fit, plotfun = "stan_trace", pars = "eta")
-  # pairs(model_fit, pars = c("theta_1"))
-  
-  # log odds of being better by day 7
-  prop_recov <- as.matrix(model_fit$stanfit, pars = c("y_fit"))
-  
-  prob_recov_mu <- colMeans(prop_recov)
-  bias_mu <- prob_recov_mu - tg_env$trtgrps$true_mu
-  
-  # Differences between proportions recovered - 
-  # computes T_dmax - T_d with d < dmax
-  prop_recov_diffs <- prop_recov[, ncol(prop_recov)] - prop_recov[, 1:(ncol(prop_recov)-1)]
-  
-  # superiority 
-  # NOTE!! ordered as p_11 - p1, p11 - p2, p_11 - p_3 etc
-  prob_sup <- colMeans(prop_recov_diffs > 0)
-  
-  # decis_sup <- colMeans(prop_recov_diffs > 0) > tg_env$p_sup_deicsion_thresh
-  
-  # NOTE!! ordered as p_1 ni p11, p_2 ni p11, p_3 ni p11, 
-  prob_ni <- colMeans(prop_recov_diffs > -cfg$p_ni_thresh & 
-                        prop_recov_diffs < cfg$p_ni_thresh)
-  
-  # decis_ni <- colMeans(prop_recov_diffs > -tg_env$p_ni_thresh & 
-  #            prop_recov_diffs < tg_env$p_ni_thresh) > tg_env$p_ni_deicsion_thresh
-  
-  dres <- rbind(prob_sup, prob_ni)
-  
-  
-  # plot(tg_env$trtgrps$dose, tmp$prop, ylim = c(0,1))
-  # lines(tg_env$trtgrps$dose, tg_env$trtgrps$true_mu)
-  # lines(tg_env$trtgrps$dose, apply(prop_recov, 2, mean), col = "red")
-  # lines(tg_env$trtgrps$dose, apply(prop_recov, 2, quantile, 0.1), col = "red", lty = 2)
-  # lines(tg_env$trtgrps$dose, apply(prop_recov, 2, quantile, 0.9), col = "red", lty = 2)
-  
-  
-  return(list(dres = dres,
-              prob_recov_mu = prob_recov_mu, 
-              bias_mu = bias_mu))
-}
 
 simulate_trial <- function(id_trial = 1){
   
@@ -560,7 +491,7 @@ simulate_trial <- function(id_trial = 1){
   # reset data - DEFAULTS TO 100 PER ARM
   tg_env$df <- generate_trial_data(cfg$n_per_trt)
 
-  l <- fit_stan_2()
+  l <- fit_walker_1()
 
   l
 
