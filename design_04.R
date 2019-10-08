@@ -113,7 +113,7 @@ scenario <- function(idx = 0, dose = 0:10){
 
  
   if(idx == 1){
-    tg_env$location <- 5
+    tg_env$location <- 3
     tg_env$scale <- 1.2
     tg_env$p_range <- 0
     tg_env$p_lwr <- 0.5
@@ -122,28 +122,28 @@ scenario <- function(idx = 0, dose = 0:10){
     
     tg_env$location <- 3
     tg_env$scale <- 1.2
-    tg_env$p_range <- 0.1
+    tg_env$p_range <- 0.15
     tg_env$p_lwr <- 0.5
 
   } else if(idx == 3){
     
-    tg_env$location <- 5
+    tg_env$location <- 3
     tg_env$scale <- 1.2
-    tg_env$p_range <- 0.1
+    tg_env$p_range <- 0.3
     tg_env$p_lwr <- 0.5
 
   } else if(idx == 4){
     
-    tg_env$location <- 7
+    tg_env$location <- 3
     tg_env$scale <- 1.2
-    tg_env$p_range <- 0.1
+    tg_env$p_range <- 0.45
     tg_env$p_lwr <- 0.5
 
   } else if(idx == 5){
     
-    tg_env$location <- 3
+    tg_env$location <- 5
     tg_env$scale <- 1.2
-    tg_env$p_range <- 0.3
+    tg_env$p_range <- 0.15
     tg_env$p_lwr <- 0.5
 
   } else if(idx == 6){
@@ -155,9 +155,9 @@ scenario <- function(idx = 0, dose = 0:10){
     
   } else if(idx == 7){
     
-    tg_env$location <- 7
+    tg_env$location <- 5
     tg_env$scale <- 1.2
-    tg_env$p_range <- 0.3
+    tg_env$p_range <- 0.45
     tg_env$p_lwr <- 0.5
     
   } 
@@ -401,6 +401,7 @@ fit_stan_2 <- function(){
 fit_walker_1 <- function(){
   
   # participant data
+  # tg_env$df <- generate_trial_data(cfg$n_per_trt)
   tmp <- tg_env$df %>%
     dplyr::group_by(dose) %>%
     dplyr::summarise(y = sum(y),
@@ -408,7 +409,7 @@ fit_walker_1 <- function(){
                      prop = y/trials) %>%
     dplyr::ungroup() 
   
-  #  plot(tmp$dose, tmp$prop, ylim = 0:1)
+  # plot(tmp$dose, tmp$prop, ylim = 0:1)
   
   model_data <- list(D = length(tmp$dose),
                      duration = tmp$dose,
@@ -433,6 +434,17 @@ fit_walker_1 <- function(){
   
   # log odds of being better by day 7
   prop_recov <- as.matrix(model_fit$stanfit, pars = c("y_fit"))
+  
+  
+  # dfig <- as.data.frame(prop_recov) %>%
+  #   tidyr::gather("dose", "precov") %>%
+  #   dplyr::mutate(dose = gsub("y_fit\\[", "", dose),
+  #                 dose = gsub("\\]", "", dose),
+  #                 dose = as.numeric(dose))
+  # dfig$dose <- tg_env$trtgrps$dose[dfig$dose]
+  # 
+  # ggplot(dfig, aes(x = dose, y = precov, group = dose))+
+  #   geom_violin()
 
   prob_recov_mu <- colMeans(prop_recov)
   prob_recov_mu_lwr <- apply(prop_recov, 2, quantile, 0.1)
@@ -442,8 +454,20 @@ fit_walker_1 <- function(){
   
   # Differences between proportions recovered - 
   # computes T_dmax - T_d with d < dmax
-  prop_recov_diffs <- prop_recov[, ncol(prop_recov)] - prop_recov[, 1:(ncol(prop_recov)-1)]
+  prop_recov_diffs <- prop_recov[, 1:(ncol(prop_recov)-1)] - prop_recov[, ncol(prop_recov)]
   
+  
+  dfig <- as.data.frame(prop_recov_diffs) %>%
+    tidyr::gather("comp_to", "delta") %>%
+    dplyr::mutate(comp_to = gsub("y_fit\\[", "", comp_to),
+                  comp_to = gsub("\\]", "", comp_to),
+                  comp_to = as.numeric(comp_to))
+  dfig$comp_to <- tg_env$trtgrps$dose[dfig$comp_to]
+
+  ggplot(dfig, aes(x = comp_to, y = delta, group = comp_to))+
+    geom_violin() +
+    geom_hline(yintercept = -0.05, col = "red")
+
   # superiority 
   # NOTE!! ordered as p_11 - p1, p11 - p2, p_11 - p_3 etc
   prob_sup <- colMeans(prop_recov_diffs > 0)
@@ -451,14 +475,12 @@ fit_walker_1 <- function(){
   # decis_sup <- colMeans(prop_recov_diffs > 0) > tg_env$p_sup_deicsion_thresh
   
   # NOTE!! ordered as p_1 ni p11, p_2 ni p11, p_3 ni p11, 
-  prob_ni <- colMeans(prop_recov_diffs > -cfg$p_ni_thresh & 
-                        prop_recov_diffs < cfg$p_ni_thresh)
-  
+  prob_ni <- colMeans(prop_recov_diffs > -cfg$p_ni_thresh)
+
   # decis_ni <- colMeans(prop_recov_diffs > -tg_env$p_ni_thresh & 
   #            prop_recov_diffs < tg_env$p_ni_thresh) > tg_env$p_ni_deicsion_thresh
   
   dres <- rbind(prob_sup, prob_ni)
-  
   
   # plot(tg_env$trtgrps$dose, tmp$prop, ylim = c(0,1))
   # lines(tg_env$trtgrps$dose, tg_env$trtgrps$true_mu)
