@@ -120,42 +120,63 @@ scenario <- function(idx = 0, dose = 0:10){
   
   } else if(idx == 2){
     
-    tg_env$location <- 3
+    tg_env$location <- 2
     tg_env$scale <- 1.2
     tg_env$p_range <- 0.15
     tg_env$p_lwr <- 0.5
-
+    
   } else if(idx == 3){
     
-    tg_env$location <- 3
+    tg_env$location <- 2
     tg_env$scale <- 1.2
     tg_env$p_range <- 0.3
     tg_env$p_lwr <- 0.5
-
+    
   } else if(idx == 4){
     
-    tg_env$location <- 3
+    tg_env$location <- 2
     tg_env$scale <- 1.2
     tg_env$p_range <- 0.45
     tg_env$p_lwr <- 0.5
-
+    
   } else if(idx == 5){
     
-    tg_env$location <- 5
+    tg_env$location <- 3
     tg_env$scale <- 1.2
     tg_env$p_range <- 0.15
     tg_env$p_lwr <- 0.5
 
   } else if(idx == 6){
     
-    tg_env$location <- 5
+    tg_env$location <- 3
+    tg_env$scale <- 1.2
+    tg_env$p_range <- 0.3
+    tg_env$p_lwr <- 0.5
+
+  } else if(idx == 7){
+    
+    tg_env$location <- 3
+    tg_env$scale <- 1.2
+    tg_env$p_range <- 0.45
+    tg_env$p_lwr <- 0.5
+
+  } else if(idx == 8){
+    
+    tg_env$location <- 4
+    tg_env$scale <- 1.2
+    tg_env$p_range <- 0.15
+    tg_env$p_lwr <- 0.5
+
+  } else if(idx == 9){
+    
+    tg_env$location <- 4
     tg_env$scale <- 1.2
     tg_env$p_range <- 0.3
     tg_env$p_lwr <- 0.5
     
-  } else if(idx == 7){
+  } else if(idx == 10){
     
-    tg_env$location <- 5
+    tg_env$location <- 4
     tg_env$scale <- 1.2
     tg_env$p_range <- 0.45
     tg_env$p_lwr <- 0.5
@@ -420,7 +441,7 @@ fit_walker_1 <- function(){
   model_fit <- walker_glm(y ~ -1 + 
                             rw1(~ dose, beta_prior = c(0, 10), sigma_prior = c(0, 10)), 
                           data = tmp, u = tmp$trials, distribution = "binomial",
-                          refresh = 0, chains = 1)
+                          refresh = 0, chains = 1, iter = 4000)
   
   # plot_fit(model_fit)
   # print(model_fit$stanfit) 
@@ -454,7 +475,7 @@ fit_walker_1 <- function(){
   
   # Differences between proportions recovered - 
   # computes T_dmax - T_d with d < dmax
-  prop_recov_diffs <- prop_recov[, 1:(ncol(prop_recov)-1)] - prop_recov[, ncol(prop_recov)]
+  prop_recov_diffs <- prop_recov[, ncol(prop_recov)] - prop_recov[, 1:(ncol(prop_recov)-1)]
   
   
   dfig <- as.data.frame(prop_recov_diffs) %>%
@@ -471,7 +492,7 @@ fit_walker_1 <- function(){
   # superiority 
   # NOTE!! ordered as p_11 - p1, p11 - p2, p_11 - p_3 etc
   prob_sup <- colMeans(prop_recov_diffs > 0)
-  
+  prob_sup
   # decis_sup <- colMeans(prop_recov_diffs > 0) > tg_env$p_sup_deicsion_thresh
   
   # NOTE!! ordered as p_1 ni p11, p_2 ni p11, p_3 ni p11, 
