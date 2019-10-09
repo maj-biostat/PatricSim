@@ -1,0 +1,209 @@
+---
+title: "PATRIC Simulation Results"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(psych))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(htmltools))
+
+
+ggplot2::theme_set(ggplot2::theme_bw())
+ggplot2::theme_update(text = element_text(size = 10))
+ggplot2::theme_update(legend.position = "top")
+# ggplot2::theme_update(legend.title = element_blank())
+ggplot2::theme_update(axis.text.x = element_text(size = 10))
+ggplot2::theme_update(axis.text.y = element_text(size = 10))
+
+
+source("report_util.R")
+
+```
+
+```{r, include=FALSE}
+
+
+
+lres <- load_results_data("out05c")
+
+
+
+```
+
+
+
+## Recovering Parameters
+
+```{r, echo = F, eval = T}
+digits <- c(0, 2, 0, 2, 2, 0, 0, 0, 0,
+            rep(2, unique(lres$drecov$n_doses))
+            )
+
+comparison_names <- paste0(lres$doses, " days")
+
+kable(lres$drecov,
+      caption = paste0("Table. Simulation Results (", nrow(lres$drecov), " rows)"),
+      col.names = c("Scenario", "Range", "mid", "lwr", "upr", "n(dose)", "min(dose)", "max(dose)",  "n_per_arm", 
+                    comparison_names),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position") 
+
+```
+
+The figure below shows the estimated (black) proportion recovered by the model.
+
+```{r, echo = F, fig.width=5.5, fig.height=3.5, fig.cap="Estimated and true probability of recovery (error bar from 0.1 to 0.9 quantile)", fig.align="center"}
+
+dfig1 <- lres$drecov %>%
+  dplyr::select(-max_dose, -min_dose, -n_doses, -mu_lwr, -mu_upr) %>%
+  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt, -mid) %>%
+  dplyr::arrange(scenario, dose) %>%
+  dplyr::mutate(dose = gsub("D", "", dose), 
+    dose = as.numeric(dose))
+
+dfig1_lwr <- lres$drecov_lwr %>%
+  dplyr::select(-max_dose, -min_dose, -n_doses, -mu_lwr, -mu_upr) %>%
+  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt, -mid) %>%
+  dplyr::arrange(scenario, dose) %>%
+  dplyr::mutate(dose = gsub("D", "", dose), 
+    dose = as.numeric(dose)) %>%
+  dplyr::select(scenario, dose, precov) %>%
+  dplyr::rename(precov_lwr = precov)
+
+dfig1_upr <- lres$drecov_upr %>%
+  dplyr::select(-max_dose, -min_dose, -n_doses, -mu_lwr, -mu_upr) %>%
+  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt, -mid) %>%
+  dplyr::arrange(scenario, dose) %>%
+  dplyr::mutate(dose = gsub("D", "", dose), 
+    dose = as.numeric(dose)) %>%
+  dplyr::select(scenario, dose, precov) %>%
+  dplyr::rename(precov_upr = precov)
+
+dfig1 <- merge(dfig1, dfig1_lwr, by = c("scenario", "dose"))
+dfig1 <- merge(dfig1, dfig1_upr, by = c("scenario", "dose"))
+
+
+ggplot(dfig1, aes(x = dose, y = precov, group = scenario))+
+  geom_line() +
+  geom_errorbar(aes(ymin = precov_lwr , ymax = precov_upr), width = 0.0) + 
+
+  # geom_point(data = dtrue_mu, 
+  #   aes(x = dose, y = true_mu, group = scenario), col = "red") +
+  scale_y_continuous("Pr(recov)", lim = 0:1) +
+  scale_x_continuous("Days", breaks = c(0, 2, 4, 6, 8, 10)) +
+  facet_grid(paste0("Mid-point ", mid )~ paste0("Pr. range ", range ))
+
+```
+
+
+
+
+## Bias
+
+```{r, echo = F, eval = T}
+digits <- c(0, 2, 0, 2, 2, 0, 0, 0, 0, 
+            rep(2, unique(lres$drecov$n_doses))
+            )
+
+comparison_names <- paste0(lres$doses, " days")
+
+kable(lres$dbias,
+      caption = paste0("Table. Simulation Results (", nrow(lres$dbias), " rows)"),
+      col.names = c("Scenario", "Range", "mid", "lwr", "upr", "n(dose)", 
+                    "min(dose)", "max(dose)",  "n_per_arm", 
+                    comparison_names),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position") 
+
+```
+
+
+## Superiority
+
+The columns with "10 Days versus x days" show the proportion of times that the probability of recovery on the maximum duration antibiotic was found to be higher than the probability of recovery on the 1 day, 2 days, 3 days etc. In these examples we used a 90% decision threshold, i.e. those with $Pr(\pi_{max(d)} > \pi_i) > 0.9$ where $\pi_k$ is the probability (or proportion) recovered on dose $d$ and $d \in \{0, 1, \dots, 5\}$.
+
+Range gives the range in underlying true recovery probability with a lower bound of 0.5 in all scenarios. For example, a range equal to 0.3 implies that we generate data from parameter values from 0.5 to 0.8.
+
+
+```{r, echo = F, eval = T}
+digits <- c(0, 2, 0, 2, 2, 0, 0, 0, 0, 
+            rep(2, unique(lres$drecov$n_doses)-1)
+            )
+
+comparison_names <- paste0(lres$doses[-length(lres$doses)], " days")
+
+kable(lres$dsup,
+      caption = paste0("Table. Simulation Results (", nrow(lres$dsup), " rows)"),
+      col.names = c("", "", "", "lwr","upr","doses", "min", "max", "n_per_trt",
+                    comparison_names),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position")  %>%
+  add_header_above(c("Scenario" = 1, "Range" = 1, 
+                     "Mid" = 1, 
+                     "Pr(recov)" = 2,
+                     "N"=1, "Dose"=2, 
+                     "N" = 1,
+    "Max duration versus" = lres$n_doses-1))
+
+```
+
+## Non-inferiority
+
+Analogous to above but here we examine non-inferiority. NI is determined by setting an NI margin and making a decision based on the distribution of difference between proportions is above this NI margin. See design doc for further explanation.
+
+Here we show proportion of times that the probability of recovery ont the 1 day, 2 days, 3 days ... arms was found to be NI to the probability of recovery on the maximum duration arm.
+
+We used a 5% NI margin and a 60% decision threshold. 
+
+
+```{r, echo = F, eval = T}
+digits <- c(0, 2, 0, 2, 2, 0, 0, 0, 0, 
+            rep(2, unique(lres$drecov$n_doses)-1)
+            )
+
+comparison_names <- paste0(lres$doses[-length(lres$doses)], " days")
+
+kable(lres$dni,
+      caption = paste0("Table. Simulation Results (", nrow(lres$dni), " rows)"),
+      col.names = c("", "", "", "lwr","upr","doses", "min", "max", "n_per_trt",
+                    comparison_names),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position")  %>%
+  add_header_above(c("Scenario" = 1, "Range" = 1, 
+                     "Mid" = 1, 
+                     "Pr(recov)" = 2,
+                     "N"=1, "Dose"=2, 
+                     "N" = 1,
+    "Max duration versus" = lres$n_doses-1))
+
+
+
+
+```
+
+
+## Todo
+

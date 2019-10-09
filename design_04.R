@@ -99,12 +99,17 @@ drc_cumnorm <- function(dose,
   
 }
 
-scenario <- function(idx = 0, dose = 0:10){
+scenario <- function(idx = 0, dose = 0:5, 
+                     compliance = rep(1, 6)){
   
+  
+  # compliance = c(1, 1, 0.95, 0.9, 0.85, 0.8)
 
+  # assume full compliance in zero group
   tg_env$trtgrps <- tibble(
     prob_best = rep(1/length(dose), length(dose)),
     true_mu = rep(0, length(dose)),
+    compliance = compliance,
     prop_rescue = rep(0, length(dose)),
     dose = dose,
     dose_idx = 1:length(dose),
@@ -196,35 +201,65 @@ generate_trial_data <- function(n_per_arm = 100) {
   
   
   n <- nrow(tg_env$trtgrps)*n_per_arm
-  dat <- tibble(
-    id = 1:n
+  
+  # unnecessary since I am forcing balance but I might need to bring this
+  # back.
+  # dat$grp <- randomizr::complete_ra(N = n, 
+  #                                   num_arms = nrow(tg_env$trtgrps),
+  #                                   conditions = tg_env$trtgrps$dose_lab)
+  
+  
+  compliance_adjusted_resp <- function(x){
+    
+    # if fully compliant then n_non_compl is zero length
+    n_compliant <- floor(tg_env$trtgrps$compliance[x]*n_per_arm)
+    n_non_compl <- n_per_arm - n_compliant
+    
+    y <- numeric(n_per_arm)
+    # assume full compliance in zero group
+    if(x > 1){
+      # non-compliant assumed to be compliant up to previous day
+      y_compliant <- rbinom(n = n_compliant, size = 1, prob = tg_env$trtgrps$true_mu[x])
+      y_non_compl <- rbinom(n = n_non_compl, size = 1, prob = tg_env$trtgrps$true_mu[x-1])
+      y <- c(y_compliant, y_non_compl)
+    } else {
+      y <- rbinom(n = n_compliant, size = 1, prob = tg_env$trtgrps$true_mu[x])
+    }
+    y
+    
+  }
+  
+  l <- lapply(tg_env$trtgrps$dose_idx, function(x) {
+    dat <- tibble(
+      id = 1:n_per_arm + ((x - 1) * n_per_arm),
+      dose_idx = x,
+      dose = tg_env$trtgrps$dose[x],
+      y = compliance_adjusted_resp(x)
+    )
+    }
   )
+
+  # dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mu[dat$dose_idx])
+  # dat$prop_rescue <- tg_env$trtgrps$prop_rescue[dat$dose_idx]
   
-  dat$grp <- randomizr::complete_ra(N = n, 
-                                    num_arms = nrow(tg_env$trtgrps),
-                                    conditions = tg_env$trtgrps$dose_lab)
+  # idx_failures <- dat %>%
+  #   dplyr::group_by(grp) %>%
+  #   dplyr::sample_frac(size = prop_rescue) %>%
+  #   dplyr::ungroup() %>%
+  #   dplyr::pull(id)
+  # # split by trt group
+  # # sample prop_rescue records and set y to zero
+  # 
+  # dat$rescue_sought <- 0
+  # dat$rescue_sought[dat$id %in% idx_failures] <- 1
+  # 
+  # # gmodels::CrossTable(dat$rescue_sought, dat$grp)
+  # 
+  # dat$y_orig <- dat$y
+  # dat$y[dat$id %in% idx_failures] <- 0
   
-  dat$dose_idx <- as.numeric(dat$grp)
+  dat <- do.call(rbind, l)
   
-  dat$dose <- tg_env$trtgrps$dose[dat$dose_idx]
-  dat$y = rbinom(n = n, size = 1, prob = tg_env$trtgrps$true_mu[dat$dose_idx])
-  dat$prop_rescue <- tg_env$trtgrps$prop_rescue[dat$dose_idx]
-  
-  idx_failures <- dat %>%
-    dplyr::group_by(grp) %>%
-    dplyr::sample_frac(size = prop_rescue) %>%
-    dplyr::ungroup() %>%
-    dplyr::pull(id)
-  # split by trt group
-  # sample prop_rescue records and set y to zero
-  
-  dat$rescue_sought <- 0
-  dat$rescue_sought[dat$id %in% idx_failures] <- 1
-  
-  # gmodels::CrossTable(dat$rescue_sought, dat$grp)
-  
-  dat$y_orig <- dat$y
-  dat$y[dat$id %in% idx_failures] <- 0
   dat
 }
 
@@ -441,7 +476,8 @@ fit_walker_1 <- function(){
   model_fit <- walker_glm(y ~ -1 + 
                             rw1(~ dose, beta_prior = c(0, 10), sigma_prior = c(0, 10)), 
                           data = tmp, u = tmp$trials, distribution = "binomial",
-                          refresh = 0, chains = 1, iter = 4000)
+                          refresh = 0, chains = 1, iter = 4000,
+                          control = list(adapt_delta = 0.99))
   
   # plot_fit(model_fit)
   # print(model_fit$stanfit) 
@@ -478,21 +514,21 @@ fit_walker_1 <- function(){
   prop_recov_diffs <- prop_recov[, 1:(ncol(prop_recov)-1)] - prop_recov[, ncol(prop_recov)] 
    
   
-  dfig <- as.data.frame(prop_recov_diffs) %>%
-    tidyr::gather("comp_to", "delta") %>%
-    dplyr::mutate(comp_to = gsub("y_fit\\[", "", comp_to),
-                  comp_to = gsub("\\]", "", comp_to),
-                  comp_to = as.numeric(comp_to))
-  dfig$comp_to <- tg_env$trtgrps$dose[dfig$comp_to]
-
-  ggplot(dfig, aes(x = comp_to, y = delta, group = comp_to))+
-    geom_violin() +
-    geom_hline(yintercept = -0.05, col = "red")
+  # dfig <- as.data.frame(prop_recov_diffs) %>%
+  #   tidyr::gather("comp_to", "delta") %>%
+  #   dplyr::mutate(comp_to = gsub("y_fit\\[", "", comp_to),
+  #                 comp_to = gsub("\\]", "", comp_to),
+  #                 comp_to = as.numeric(comp_to))
+  # dfig$comp_to <- tg_env$trtgrps$dose[dfig$comp_to]
+  # 
+  # ggplot(dfig, aes(x = comp_to, y = delta, group = comp_to))+
+  #   geom_violin() +
+  #   geom_hline(yintercept = -0.05, col = "red")
 
   # superiority 
   # NOTE!! ordered as p_11 - p1, p11 - p2, p_11 - p_3 etc
   prob_sup <- colMeans(prop_recov_diffs < 0)
-  prob_sup
+  # prob_sup
   # decis_sup <- colMeans(prop_recov_diffs > 0) > tg_env$p_sup_deicsion_thresh
   
   # NOTE!! ordered as p_1 ni p11, p_2 ni p11, p_3 ni p11, 
