@@ -208,6 +208,7 @@ generate_trial_data <- function(n_per_arm = 100) {
   #                                   num_arms = nrow(tg_env$trtgrps),
   #                                   conditions = tg_env$trtgrps$dose_lab)
   
+  # tg_env$df <- generate_trial_data(cfg$n_per_trt)
   
   compliance_adjusted_resp <- function(x){
     
@@ -260,9 +261,54 @@ generate_trial_data <- function(n_per_arm = 100) {
   
   dat <- do.call(rbind, l)
   
+  
+  # dat %>%
+  #   dplyr::group_by(dose) %>%
+  #   dplyr::summarise(y = sum(y),
+  #                    trials = n(),
+  #                    prop = y/trials) %>%
+  #   dplyr::ungroup() 
+  
   dat
 }
 
+
+data_test <- function(){
+  
+  cfg <- get_cfg()
+  scenario(3, 
+           dose = cfg$dose,
+           compliance = c(1, 1, 0.8, 0.5, 0.5, 0.5))
+  
+  tg_env$trtgrps
+  
+  gen2 <- function(x){
+    dat <- generate_trial_data(cfg$n_per_trt)
+    dat <- cbind(simid = x, dat)
+    
+    dat <- dat %>%
+      dplyr::group_by(simid, dose) %>%
+      dplyr::summarise(y = sum(y),
+                       trials = n(),
+                       prop = y/trials) %>%
+      dplyr::ungroup() 
+    
+    dat
+  }
+  
+  
+  l <- lapply(1:10000, gen2)
+  dat <- do.call(rbind, l)
+  
+  tmp <- dat %>% 
+    dplyr::group_by(dose) %>%
+    dplyr::summarise(mu = mean(prop))
+  cbind(tg_env$trtgrps, tmp)
+  
+  ggplot(dat, aes(x = dose, y = prop))+
+    geom_violin(aes(x = factor(dose)))
+  
+}
 
 p_best <- function(mat) {
   as.numeric(prop.table(table(factor(max.col(mat), levels = 1:ncol(mat)))))
