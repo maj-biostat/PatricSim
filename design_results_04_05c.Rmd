@@ -35,13 +35,37 @@ source("report_util.R")
 
 
 
-lres <- load_results_data("out05c")
+lres <- load_results_data("out05f")
 
 
 
 ```
 
+## Compliance
 
+Assume that there is truly no difference in the proportion recovered by day 7 across all doses (0 to 5). In this case, non-compliance is irrelevant. The response will be the same regardless of whether you take the treatment or not.
+
+Now assume that this is a difference in the proportion recovered by day 7 across the doses (0 to 5). Additionally assume that those on the longer doses generally have an increased probability of recovery (mainly because it is hard to imagine any other scenario). Obviously there will be 100% with a zero dose, but it's probably reasonable to assume that those on a dose of 1 day and 2 days will have very high compliance (this is discussed in  https://academic.oup.com/jac/article/49/6/897/712911) and that compliance will fall off after this. To represent this process I simulate one subset of each dose group assuming full compliance using their true mean proportion parameter and the remainder of the members of a dose group using the recovery rate from the previous dose group. For example, assume that the 5 day dose has 80% recovery and the 4 day dose has a 70% recovery. Now assume that the 5 day dose group has a 60% compliance and that each dose group size has 100 participants. To generate the recovery rate for the 5 day dose group (let's call it the compliance-adjusted recovery), first, simulate 60 participants using a rate of recovery equal to 0.8 and then the remaining 40 participants assuming a recovery of 0.7. The combined number of events represents the adjusted recovery for the 5 day dose group. We can easily look at variations on this theme.
+
+The following results use the compliance rates at each dose detailed in the table below. For example, a 1 in the zero days dose column implies 100% compliance in that group, a 0.6 in the 4 days dose column implies 60% compliance).
+
+```{r, echo = F, eval = T}
+digits <- c(0, rep(2, 6))
+
+
+
+kable(lres$dcompliance,
+      caption = paste0("Table. Simulation Results (", nrow(lres$drecov), " rows)"),
+      col.names = c("","0", "1", "2", "3", "4", "5"),
+      digits = digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, position = "left",
+                font_size = 12,
+                latex_options = "hold_position")  %>%
+  add_header_above(c("Scenario" = 1, "Compliance at dosage/days" = 6))
+
+
+```
 
 ## Recovering Parameters
 
@@ -204,6 +228,4 @@ kable(lres$dni,
 
 ```
 
-
-## Todo
 

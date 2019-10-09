@@ -36,6 +36,8 @@ dsup <- data.frame()
 dni <- data.frame()
 
 drecov <- data.frame()
+drecov_lwr <- data.frame()
+drecov_upr <- data.frame()
 dbias <- data.frame()
 
 dtrue_mu <- data.frame()
@@ -73,7 +75,7 @@ for(i in 1:length(fout)){
   # non-inferiority
   # dtmp <- cbind(l$dni, apply(l$dni[, 1:ncol(l$dni)], 2, mean))
   
-  dtmp <- cbind(l$dni, apply(l$dni[, 1:ncol(l$dni)], 2, function(x){ x > 0.6}))
+  dtmp <- cbind(l$dni, apply(l$dni[, 1:ncol(l$dni)], 2, function(x){ x > 0.5}))
   
   tmp <- c(scenario = l$scenario, 
            range = l$trtgrps$p_range,
@@ -93,6 +95,7 @@ for(i in 1:length(fout)){
   # prob recovery
   tmp <- c(scenario = l$scenario, 
            range = l$trtgrps$p_range,
+           mid = l$trtgrps$location,
            n_doses = n_doses,
            min_dose = min_dose,
            max_dose = max_dose,
@@ -103,8 +106,36 @@ for(i in 1:length(fout)){
   names(drecov) <- names(tmp)
   names(drecov)[(ncol(drecov)-n_doses+1):ncol(drecov)] <- paste0("D", doses)
   
+  tmp <- c(scenario = l$scenario, 
+           range = l$trtgrps$p_range,
+           mid = l$trtgrps$location,
+           n_doses = n_doses,
+           min_dose = min_dose,
+           max_dose = max_dose,
+           n_per_trt = l$n_per_trt,
+           colMeans(l$dprob_lwr))
+  
+  drecov_lwr <- rbind(drecov_lwr, tmp)
+  names(drecov_lwr) <- names(tmp)
+  names(drecov_lwr)[(ncol(drecov_lwr)-n_doses+1):ncol(drecov_lwr)] <- paste0("D", doses)
+  
+  tmp <- c(scenario = l$scenario, 
+           range = l$trtgrps$p_range,
+           mid = l$trtgrps$location,
+           n_doses = n_doses,
+           min_dose = min_dose,
+           max_dose = max_dose,
+           n_per_trt = l$n_per_trt,
+           colMeans(l$dprob_upr))
+  
+  drecov_upr <- rbind(drecov_upr, tmp)
+  names(drecov_upr) <- names(tmp)
+  names(drecov_upr)[(ncol(drecov_upr)-n_doses+1):ncol(drecov_upr)] <- paste0("D", doses)
+  # prob recovery end
+  
   tmp <- cbind(scenario = l$scenario, 
            range = l$trtgrps$p_range,
+           mid = l$trtgrps$location,
            n_doses = n_doses,
            min_dose = min_dose,
            max_dose = max_dose,
@@ -142,7 +173,7 @@ rownames(dni) <- NULL
 ## Recovering Parameters
 
 ```{r, echo = F, eval = T}
-digits <- c(0, 1, 0, 0, 0, 0,
+digits <- c(0, 1, 0, 0, 0, 0,0,
             rep(2, 5)
             )
 
@@ -150,7 +181,7 @@ comparison_names <- paste0(doses, " days")
 
 kable(drecov,
       caption = paste0("Table. Simulation Results (", nrow(drecov), " rows)"),
-      col.names = c("Scenario", "Range", "n(dose)", "min(dose)", "max(dose)",  "n_per_arm", 
+      col.names = c("Scenario", "Range", "Mid","n(dose)", "min(dose)", "max(dose)",  "n_per_arm", 
                     comparison_names),
       digits = digits) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
@@ -160,25 +191,48 @@ kable(drecov,
 
 ```
 
-The figure below shows the estimated (black) proportion recovered and true proportion recovered (red).
+The figure below shows the estimated (black) proportion recovered.
 
-```{r, echo = F, fig.width=5.5, fig.height=3.5, fig.cap="Estimated and true probability of recovery", fig.align="center"}
+```{r, echo = F, fig.width=6, fig.height=6, fig.cap="Estimated and true probability of recovery", fig.align="center"}
 
 dfig1 <- drecov %>%
   dplyr::select(-max_dose, -min_dose, -n_doses) %>%
-  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt) %>%
+  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt, -mid) %>%
   dplyr::arrange(scenario, dose) %>%
   dplyr::mutate(dose = gsub("D", "", dose), 
     dose = as.numeric(dose))
 
+dfig1_lwr <- drecov_lwr %>%
+  dplyr::select(-max_dose, -min_dose, -n_doses) %>%
+  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt, -mid) %>%
+  dplyr::arrange(scenario, dose) %>%
+  dplyr::mutate(dose = gsub("D", "", dose), 
+    dose = as.numeric(dose)) %>%
+  dplyr::select(scenario, dose, precov) %>%
+  dplyr::rename(precov_lwr = precov)
+
+dfig1_upr <- drecov_upr %>%
+  dplyr::select(-max_dose, -min_dose, -n_doses) %>%
+  tidyr::gather("dose", "precov", -range, -scenario, -n_per_trt, -mid) %>%
+  dplyr::arrange(scenario, dose) %>%
+  dplyr::mutate(dose = gsub("D", "", dose), 
+    dose = as.numeric(dose)) %>%
+  dplyr::select(scenario, dose, precov) %>%
+  dplyr::rename(precov_upr = precov)
+
+dfig1 <- merge(dfig1, dfig1_lwr, by = c("scenario", "dose"))
+dfig1 <- merge(dfig1, dfig1_upr, by = c("scenario", "dose"))
+
+
 ggplot(dfig1, aes(x = dose, y = precov, group = scenario))+
   geom_line() +
-  geom_point() +
-  geom_point(data = dtrue_mu, 
-    aes(x = dose, y = true_mu, group = scenario), col = "red") +
+  geom_errorbar(aes(ymin = precov_lwr , ymax = precov_upr), width = 0.0) + 
+
+  # geom_point(data = dtrue_mu, 
+  #   aes(x = dose, y = true_mu, group = scenario), col = "red") +
   scale_y_continuous("Pr(recov)", lim = 0:1) +
   scale_x_continuous("Days", breaks = c(0, 2, 4, 6, 8, 10)) +
-  facet_wrap(.~ paste0("Pr. range ", range ))
+  facet_grid(paste0("Mid-point ", mid )~ paste0("Pr. range ", range ))
 
 ```
 
