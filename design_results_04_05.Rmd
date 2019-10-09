@@ -1,6 +1,16 @@
 ---
 title: "PATRIC Simulation Results"
 output: html_document
+knit: (
+  function(inputFile, encoding) { 
+
+    pSubTitle <- 'out05f'
+
+    rmarkdown::render( 
+      input       = inputFile, 
+      encoding    = encoding, 
+      params      = list(sub_title = pSubTitle),      
+      output_file = pSubTitle) })
 ---
 
 ```{r setup, include=FALSE}
