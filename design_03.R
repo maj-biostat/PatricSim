@@ -54,7 +54,6 @@ print_tg_env <- function(){
   list(trtgrps = tg_env$trtgrps, 
        lwr = tg_env$lwr,
        upr = tg_env$upr,
-       ed50 = tg_env$ed50,
        slope = tg_env$slope
        
   )
@@ -67,11 +66,10 @@ plot_tg_env_drc <- function(){
 
 
 
-# f(dose) = C + [(D-C) / (1 + exp(B * (dose - I)))]
-drc_loglogistic <- function(dose = 1, ed50 = 4, slope = 4, lwr = 0.2, upr = 0.7){
+drc_loglogistic <- function(dose = 1, slope = 4, lwr = 0.2, upr = 0.7){
   numer = upr - lwr
   
-  denom = 1 + exp(slope * (log(dose) - log(ed50)))
+  denom = 1 + exp(slope * log(dose))
   if(slope == 0 & any(is.nan(denom))){
     denom[is.nan(denom)] <- 2
   }
@@ -81,22 +79,21 @@ drc_loglogistic <- function(dose = 1, ed50 = 4, slope = 4, lwr = 0.2, upr = 0.7)
 }
 
 
-# dose = 0:10; ed50 = 3.5; slope = 0; lwr = 0.2;  upr = 0.8
-# drc_loglogistic(dose, ed50, slope, lwr, upr)
-# plot(dose, drc_loglogistic(dose, ed50, slope, lwr, upr), ylim = c(0, 1))
+# dose = 0:10; slope = 0; lwr = 0.2;  upr = 0.8
+# drc_loglogistic(dose, slope, lwr, upr)
+# plot(dose, drc_loglogistic(dose, slope, lwr, upr), ylim = c(0, 1))
 
-scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), ed50 = 5, 
+scenario <- function(idx = 1, dose = c(0, 2, 3, 5,7), 
                      slope = 1, lwr = 0.2, upr = 0.8){
   
   
-  tg_env$ed50 <- ed50
   tg_env$slope <- slope
   tg_env$lwr <- lwr
   tg_env$upr <- upr
   
   tg_env$trtgrps <- tibble(
     prob_best = rep(1/length(dose), length(dose)),
-    true_mu = drc_loglogistic(dose, ed50, slope, lwr, upr),
+    true_mu = drc_loglogistic(dose, slope, lwr, upr),
     prop_rescue = rep(0, length(dose)),
     dose = dose,
     dose_idx = 1:length(dose),
@@ -153,7 +150,7 @@ p_best <- function(mat) {
 
 fit_stan <- function(){
   
-  # idx = 1; dose = c(0, 2, 3, 5, 7); ed50 = 4; slope = -1; lwr = 0.7; upr = 0.8; scenario(idx, dose, ed50, slope, lwr, upr)
+  # idx = 1; dose = c(0, 2, 3, 5, 7); slope = -1; lwr = 0.7; upr = 0.8; scenario(idx, dose, slope, lwr, upr)
 
   
   print_tg_env()
@@ -163,7 +160,6 @@ fit_stan <- function(){
   # tg_env$df <- generate_trial_data(n_per_arm = 100)
   # gmodels::CrossTable(tg_env$df$y, tg_env$df$dose)
   # tg_env$model_code <- rstan::stan_model(file = "logistic_03.stan", auto_write = TRUE)
-  # tg_env$model_code <- rstan::stan_model(file = "logistic_03b.stan", auto_write = TRUE)
   
   
   # participant data
@@ -207,13 +203,12 @@ fit_stan <- function(){
   
   # print(model_fit, digits = 3)
   # print_tg_env()
-  # plot(model_fit, plotfun = "stan_trace")
-  # pairs(model_fit, pars = c("slope", "ed50", "lwr", "upr"))
+  # plot(model_fit, plotfun = "stan_trace", pars = c("slope", "lwr", "upr"))
+  # pairs(model_fit, pars = c("slope", "lwr", "upr"))
   # pairs(model_fit, pars = "yhat")
-  # print(model_fit, digits = 3)
   
   # log odds of being better by day 7
-  model_draws <- as.matrix(model_fit, pars = c("ed50", "slope", "lwr", "upr"))
+  model_draws <- as.matrix(model_fit, pars = c("slope", "lwr", "upr"))
   head(model_draws)
   
   
@@ -227,14 +222,14 @@ fit_stan <- function(){
 
 some_plots <- function(){
   par(mfrow = c(2, 2))
-  print(lapply(1:4, function(x) hist(model_draws[, x], main = colnames(model_draws)[x])))
+  print(lapply(1:3, function(x) hist(model_draws[, x], main = colnames(model_draws)[x])))
   par(mfrow = c(1, 1))
   
   
   resp_est <- function(dose){
     
     resp_var <- function(x){
-      drc_loglogistic(dose, model_draws[x, "ed50"],
+      drc_loglogistic(dose, 
                       model_draws[x, "slope"],
                       model_draws[x, "lwr"],
                       model_draws[x, "upr"])
@@ -278,7 +273,7 @@ simulate_trial <- function(id_trial = 1){
   message(paste0("###########################################"))
   
   # scenario(cfg$scenarioid)
-  scenario(cfg$scenarioid, dose = c(0, 2, 3, 5,7), ed50 = 5, 
+  scenario(cfg$scenarioid, dose = c(0, 2, 3, 5,7), 
            slope = 1, lwr = 0.2, upr = 0.8)
 
   # reset data
